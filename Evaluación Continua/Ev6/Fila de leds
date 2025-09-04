@@ -42,3 +42,11 @@ RESET:
     in   r16, PINB
     andi r16, BTN_MASK
     sts  prev_pb, r16
+
+ ; Estado inicial
+    ldi  r16,0
+    sts  modo,r16
+    ldi  r16,0x01
+    sts  bar,r16
+    clr  r16
+    sts  ec_idx,r16
