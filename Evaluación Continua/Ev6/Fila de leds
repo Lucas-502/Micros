@@ -1,5 +1,24 @@
 .include "m328pdef.inc"
 
+.equ ACTIVE_LOW = 1
+.equ BTN0_BIT = 0
+.equ BTN1_BIT = 1
+.equ BTN2_BIT = 3
+.equ BTN_MASK = (1<<BTN0_BIT)|(1<<BTN1_BIT)|(1<<BTN2_BIT)
+
+.dseg
+modo:    .byte 1
+bar:     .byte 1
+ec_idx:  .byte 1
+prev_pb: .byte 1
+
+.cseg
+.org 0x0000
+    rjmp RESET
+
+ec_tab:
+    .db 0x81,0x42,0x24,0x18,0x24,0x42,0x81
+
 RESET:
 ;  Stack 
     ldi  r16, high(RAMEND)
