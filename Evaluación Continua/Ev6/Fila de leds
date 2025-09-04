@@ -1,1 +1,25 @@
-hola
+.include "m328pdef.inc"
+
+RESET:
+;  Stack
+    ldi  r16, high(RAMEND)
+    out  SPH, r16
+    ldi  r16, low(RAMEND)
+    out  SPL, r16
+
+; --- LED PORTD salida, Active LOW
+    ldi  r16, 0xFF
+    out  DDRD, r16
+    ldi  r16, 0xFF
+    out  PORTD, r16
+
+;  Botones con pull-up
+    cbi  DDRB, BTN0_BIT
+    cbi  DDRB, BTN1_BIT
+    cbi  DDRB, BTN2_BIT
+    sbi  PORTB, BTN0_BIT
+    sbi  PORTB, BTN1_BIT
+    sbi  PORTB, BTN2_BIT
+    in   r16, PINB
+    andi r16, BTN_MASK
+    sts  prev_pb, r16
