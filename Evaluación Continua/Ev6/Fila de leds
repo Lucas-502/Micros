@@ -71,7 +71,7 @@ WTICK:
     ldi  r16, (1<<OCF1A)
     out  TIFR1, r16
 
-; leer botones flaco de 1 a 0
+; leer botones flanco de 1 a 0
     in   r22, PINB
     andi r22, BTN_MASK
     lds  r23, prev_pb
@@ -87,3 +87,64 @@ WTICK:
     rcall SET_SECU
     sbrc r24, BTN2_BIT
     rcall SET_EXT
+
+; Un paso del modo actual 
+
+    lds  r16, modo
+    cpi  r16, 0
+    breq STEP_DESP
+    cpi  r16, 1
+    breq STEP_SECU
+    rjmp STEP_EXT
+
+ ; Desplazamiento de izquierda a derecha un led encendido
+
+STEP_DESP:
+    lds  r18, bar
+    rcall SHOW
+    lds  r16, bar
+    lsl  r16                   ; corre hacia la derecha
+    brne D_KEEP
+    ldi  r16, 0x01             ; vuelve al inicio
+D_KEEP:
+    sts  bar, r16
+    rjmp MAIN
+
+; Desplazamiento de izquierda a derecha con led continuo
+
+STEP_SECU:
+    lds  r18, bar
+    rcall SHOW
+    lds  r16, bar
+    cpi  r16, 0xFF
+    breq S_RST
+    lsl  r16
+    ori  r16, 0x01
+    sts  bar, r16
+    rjmp MAIN
+S_RST:
+    ldi  r16, 0x01
+    sts  bar, r16
+    rjmp MAIN
+
+;Desplazamiento de extremos al centro y regreso
+
+STEP_EXT:
+    lds  r16, ec_idx
+    ldi  ZH, high(ec_tab<<1)
+    ldi  ZL, low(ec_tab<<1)
+    clr  r25
+    add  ZL, r16
+    adc  ZH, r25
+    lpm  r18, Z
+    rcall SHOW
+    lds  r16, ec_idx
+    inc  r16
+    cpi  r16, 7
+    brlo E_KEEP
+    ldi  r16, 0
+E_KEEP:
+    sts  ec_idx, r16
+    rjmp MAIN
+
+;
