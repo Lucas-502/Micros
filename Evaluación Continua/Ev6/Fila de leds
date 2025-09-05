@@ -62,3 +62,11 @@ ldi  r16, high(49999)
     sts  TCCR1B, r16
     ldi  r16, (1<<OCF1A)
     out  TIFR1, r16
+
+MAIN:
+WTICK:
+    in   r16, TIFR1
+    sbrs r16, OCF1A
+    rjmp WTICK
+    ldi  r16, (1<<OCF1A)
+    out  TIFR1, r16
