@@ -234,3 +234,19 @@ apagar_filas:
     ori  a, 0x03              
     out  PORTB, a
    ret
+
+apagar_columnas:
+    in   a, PORTB
+    andi a, 0xC3               ; PB2..PB5=0
+    out  PORTB, a
+    in   a, PORTC
+    andi a, 0xC3               ; PC2..PC5=0
+    out  PORTC, a
+    ret
+
+retardo_fila:
+    ldi  a, 0x80
+loop_retardo:
+    dec  a
+    brne loop_retardo
+    ret
