@@ -74,4 +74,155 @@ inicio:
 
     ldi  indice_figura, 0      ; arranca con carita feliz
 
-principal
+principal:
+ldi segundos, TIEMPO_FIGURA_S
+rcall esperar_segundos
+
+inc indice_figura
+cpi indice_figura, 5
+brlo ok_fig 
+ldi indice_figura, 0
+ok_fig:
+rjmp principal
+
+esperar_segundos:
+espera_loop:
+ldi a, 0x02
+out TIFR1, a          ;limpiar OCF1A
+tick:
+rcall multiplexar_una_vez      ;refresco de 8 filas
+in a, TIFR1
+andi a, 0x02
+breq tick
+dec segundos
+brne espera_loop
+ret
+
+multiplexar_una_vez:
+ldi fila,0
+sig_fila:
+
+ldi ZH, higt(tabla_figuras<<1)
+ldi ZH, low(tabla_figuras<<1)
+mov d, indice_figura
+lsl d      ;idx*2 (puntero=2 bytes)
+add ZL,d
+clr r0
+adc ZH,r0
+lpm a,Z+
+lpm b,Z
+mov ZL,a
+mov ZH,b
+lsl ZL
+rol ZH
+
+add ZL,fila
+clr c
+adc ZH,c 
+lpm columnas,z
+
+rcall cargar_columnas
+rcall seleccionar_fila
+rcall retardo_fila
+rcall apagar_filas
+rcall apagar_columnas
+
+inc fila
+cpi fila,8
+brlo sig_fila
+ret
+
+cargar_columnas:
+; PortB (col 1-4)
+in a, PORTB
+andi a,0xC3
+mov b,columnas
+andi b, 0x0F
+col1..4
+lsl b
+lsl b
+PB2..PB5
+or a,b
+out PORTB,a
+
+;PortC (col 5-8)
+in   a, PORTC
+andi a, 0xC3              
+clr  b
+
+mov  c, columnas
+andi c, 0x10               
+lsl  c                     
+or   b, c
+
+; col6(bit5) -> PC4(bit4): “corrimos 1 bit a la derecha”
+; (equivalente a: b4 = columnas.bit5)
+mov  c, columnas
+andi c, 0x20               ; aísla bit5
+lsr  c                      ; 0x20 >> 1 = 0x10 (bit4)
+or   b, c
+
+; col7(bit6) -> PC3(bit3): “corrimos 3 bits a la derecha”
+; (equivalente a: b3 = columnas.bit6)
+mov  c, columnas
+andi c, 0x40             
+lsr  c
+lsr  c
+lsr  c
+or   b, c
+
+; col8(bit7) -> PC2(bit2): “corrimos 5 bits a la derecha”
+; (equivalente a: b2 = columnas.bit7)
+mov  c, columnas
+andi c, 0x80              
+; corremos columnas 5 bits a la derecha para alinear con PC2
+lsr  c
+lsr  c
+lsr  c
+lsr  c
+lsr  c
+or   b, c
+
+andi b, 0x3C               
+or   a, b
+out  PORTC, a
+ret
+
+; filas 0..5 -> PD2..PD7 ; fila 6 -> PB0 ; fila 7 -> PB1
+seleccionar_fila:
+rcall apagar_filas
+mov  a, fila
+cpi  a, 0x06
+brlo fila_PD
+
+in   b, PORTB
+cpi  a, 0x06
+breq fila_PB0
+andi b, 0xFD            
+out  PORTB, b
+ret
+
+fila_PB0:
+andi b, 0xFE               
+out  PORTB, b
+ret
+
+fila_PD:
+; PD(2+fila) = 0
+ldi  b, 0x01
+add  a, b
+add  a, b                
+in   c, PORTD
+ldi  d, 0x01
+desplazar:
+dec  a
+brmi listo
+lsl  d                     
+rjmp desplazar
+listo:
+
+com  d                    
+and  c, d
+out  PORTD, c
+ret
+
