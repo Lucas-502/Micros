@@ -226,3 +226,11 @@ and  c, d
 out  PORTD, c
 ret
 
+apagar_filas:
+    in   a, PORTD
+    ori  a, 0xFC               
+    out  PORTD, a
+    in   a, PORTB
+    ori  a, 0x03              
+    out  PORTB, a
+   ret
