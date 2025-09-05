@@ -50,3 +50,15 @@ RESET:
     sts  bar,r16
     clr  r16
     sts  ec_idx,r16
+
+; timersitoo
+ldi  r16, high(49999)
+    sts  OCR1AH, r16
+    ldi  r16, low(49999)
+    sts  OCR1AL, r16
+    ldi  r16, 0
+    sts  TCCR1A, r16
+    ldi  r16, (1<<WGM12)|(1<<CS11)|(1<<CS10)
+    sts  TCCR1B, r16
+    ldi  r16, (1<<OCF1A)
+    out  TIFR1, r16
