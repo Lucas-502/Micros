@@ -70,3 +70,20 @@ WTICK:
     rjmp WTICK
     ldi  r16, (1<<OCF1A)
     out  TIFR1, r16
+
+; leer botones flaco de 1 a 0
+    in   r22, PINB
+    andi r22, BTN_MASK
+    lds  r23, prev_pb
+    mov  r24, r22
+    com  r24
+    andi r24, BTN_MASK
+    and  r24, r23
+    sts  prev_pb, r22
+
+    sbrc r24, BTN0_BIT
+    rcall SET_DESP
+    sbrc r24, BTN1_BIT
+    rcall SET_SECU
+    sbrc r24, BTN2_BIT
+    rcall SET_EXT
