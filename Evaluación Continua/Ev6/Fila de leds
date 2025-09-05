@@ -147,4 +147,35 @@ E_KEEP:
     sts  ec_idx, r16
     rjmp MAIN
 
-;
+; ===== Setters =====
+SET_DESP:
+    ldi  r16, 0
+    sts  modo, r16
+    ldi  r16, 0x01
+    sts  bar,  r16
+    ret
+
+SET_SECU:
+    ldi  r16, 1
+    sts  modo, r16
+    ldi  r16, 0x01
+    sts  bar,  r16
+    ret
+
+SET_EXT:
+    ldi  r16, 2
+    sts  modo, r16
+    clr  r16
+    sts  ec_idx, r16
+    ret
+
+; ===== Mostrar en PORTD (respeta Active LOW) =====
+; r18 = patrón con SOLO los LEDs que deben encenderse.
+SHOW:
+    ldi  r19, ACTIVE_LOW
+    tst  r19
+    breq NO_INV
+    com  r18       
+NO_INV:
+    out  PORTD, r18
+    ret
