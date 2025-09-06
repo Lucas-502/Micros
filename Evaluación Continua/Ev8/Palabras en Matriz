@@ -1,51 +1,88 @@
 .include "m328pdef.inc"
 
+;Declaración de las variables
+
+.def a              = r16      ; temporales
+.def b              = r17
+.def c              = r18
+.def d              = r19
+
+.def fila           = r20      ; índice de fila 0 - 7
+.def columnas       = r21      ; patrón de columnas de la fila actual (1=LED ON)
+.def indice_letras  = r22      ; índice en la tabla de figuras (0 - 15)
+
+no me acuerdo si es necesario para este ejercicio
+.def segundos       = r23      ; contador de segundos para Timer1
 
 .cseg
 .org 0x0000
     rjmp Inicio
 
+; Frase coherente: " Where is Gololo? " (Lo perdimos en londres y no lo encontramos, entonces mandamos un mensaje por la matriz de leds)
+
+.db 0b00100010,0b00100010,0b00100010,0b00101010,0b00111110,0b00110110,0b00100010,0b00000000 ; W
+.db 0b00100010,0b00100010,0b00100010,0b00111110,0b00100010,0b00100010,0b00100010,0b00000000 ; H
+.db 0b00111110,0b01000000,0b01000000,0b00111100,0b01000000,0b01000000,0b00111110,0b00000000 ; E
+.db 0b01111000,0b01000010,0b01000010,0b01111000,0b01001000,0b01000100,0b01000100,0b00000000 ; R
+.db 0b00111110,0b01000000,0b01000000,0b00111100,0b01000000,0b01000000,0b00111110,0b00000000 ; E
+.db 0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000;
+.db 0b00111110,0b00001000,0b00001000,0b00001000,0b00001000,0b00001000,0b00001000,0b00111110 ; I
+.db 0b00111000,0b01000100,0b01000000,0b00111000,0b00000100,0b01000100,0b00111000,0b00000000 ; S
+.db 0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000;
+.db 0b00111100,0b01000000,0b01000000,0b01001110,0b01000010,0b01000010,0b00111100,0b00000000 ; G
+.db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 ; O
+.db 0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00111110,0b00000000 ; L
+.db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 ; O
+.db 0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00111110,0b00000000 ; L
+.db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 ; O
+.db 0b00011100,0b00100010,0b00100010,0b00000010,0b00000100,0b00001000,0b00000000,0b00001000 ; ?
+
 Inicio:
-    ; --- Stack ---
+    ;  Stack Pointer
     ldi  r16, high(RAMEND)     ; ldi: carga inmediata
-    out  SPH, r16              ; out: escribe en IO
+    out  SPH, a                ; out: escribe en IO
     ldi  r16, low(RAMEND)
-    out  SPL, r16
+    out  SPL, a
 
-    ; --- GPIO ---
-    sbi  DDRB, 0               ; PB0 salida (LED variable)
+   ; Dirección de pines (salida)
+    ldi  a, 0xFC
+    out  DDRD, a               ; PD7..PD2 -> filas 1..6
+    ldi  a, 0x3F
+    out  DDRB, a               ; PB5..PB0 -> cols 1..4 + filas 7/8
+    ldi  a, 0x3C
+    out  DDRC, a               ; PC5..PC2 -> cols 5..8
     sbi  DDRB, 5               ; PB5 salida (indica si se recibió la señal del botón)
-    cbi  DDRD, 2               ; PD2 entrada
-    cbi  DDRD, 3               ; PD3 entrada
-    sbi  PORTD, 2              ; pull-up PD2
-    sbi  PORTD, 3              ; pull-up PD3
+    ; Dirección de pines entrada
+    cbi  DDRC, 1               ; A1 PC1 entrada
+    cbi  DDRC, 0               ; A0 PC0 entrada
+    sbi  PORTD, 1              ; pull-up PC1
+    sbi  PORTD, 0              ; pull-up PC0
 
-    ; --- Timer0 /1024 ---
-    ldi  r16, 0x05             ; CS02=1, CS01=0, CS00=1
-    out  TCCR0B, r16
-    ldi  r16, 0x00
-    out  TCNT0, r16
-    ldi  r16, 0x01
-    out  TIFR0, r16            ; limpia TOV0 (Escribe 1 para limpiar)
 
-    ; --- Estado inicial ---
-    ldi  r25, 0x00             ; tiempo = 0x003D (?1 s)
-    ldi  r24, 0x3D
-    ldi  r21, 0x00             ; flags pulsación = 0
+
+    ; Estado inicial  (columnas=0, filas=1)
+    ldi  a, 0x00
+    out  PORTB, a
+    ldi  a, 0x00
+    out  PORTC, a
+    ldi  a, 0xFC
+    out  PORTD, a
+    in   a, PORTB
+    ori  a, 0x03
+    out  PORTB, a
 
 main:
-    sbi  PORTB, 0              ; LED ON
-    rcall espera_ajustable
-    cbi  PORTB, 0              ; LED OFF
-    rcall espera_ajustable
-    rjmp main
+    ldi  segundos, TIEMPO_FIGURA_S
+    rcall esperar_pulso
 
-espera_ajustable:
-    mov  r27, r25              ; contador = tiempo (H)
-    mov  r26, r24              ; contador = tiempo (L)
-    ldi  r16, 0x01
-    out  TIFR0, r16            ; reset TOV0
+    inc  indice_figura
+    cpi  indice_figura, 5
+    brlo ok_fig
+    ldi  indice_figura, 0
+ok_fig:
+    rjmp principal
 
+------- borrar
 espera_loop:
     in   r16, TIFR0
     andi r16, 0x01             ; andi: enmascara bit TOV0
@@ -64,33 +101,17 @@ espera_loop:
     mov  r18, r21
     andi r18, 0x01             ; ¿flag INC ya contado?
     brne check_dec               ; sí -> no sumar de nuevo
-
+---------
+____________________________________________________________________________
     sbi  PORTB, 5              ; indicador ON
     ldi  r18, 0x0C             ; +paso 0,2s (12 ovf)
     add  r24, r18              ; suma en L
     ldi  r18, 0x00
     adc  r25, r18              ; acarreo en H
+__________________________________________________________________________
 
-    ; Límiste MAX = 0x0400 (1024 ovf)
-    ldi  r19, 0x04             ; Hmax
-    ldi  r18, 0x00             ; Lmax
-    cp   r25, r19              ; compara H
-    brlo inc_ok                ; H < Hmax -> OK
-    brne set_max_inc           ; H > Hmax -> saturar
-    cp   r24, r18              ; H == Hmax -> compara L
-    brlo inc_ok                ; L < Lmax -> OK
-    breq inc_ok                ; L == Lmax -> OK
-set_max_inc:
-    mov  r25, r19              ; saturar a MAX
-    mov  r24, r18
-inc_ok:
-    mov  r27, r25              ; recarga contador con nuevo tiempo
-    mov  r26, r24              ; aplica inmediato
-    ori  r21, 0x01             ; set flag INC (una vez por toque)
-    rjmp check_dec
-
-inc_suelto:
-    andi r21, 0xFE             ; clear flag INC al soltar botón
+Izquierda_suelto:
+    andi r21, 0xFE             ; clear flag 
 
 check_dec:
     mov  r17, r16
@@ -101,36 +122,186 @@ check_dec:
     mov  r18, r21
     andi r18, 0x02             ; ¿flag DEC ya contado?
     brne dec_cont               ; sí -> no restar de nuevo
-
+_________________________________________________________________________________-
     sbi  PORTB, 5              ; indicador ON
     ldi  r18, 0x0C             ; ?paso 0,2s (12 ovf)
     sub  r24, r18
     ldi  r18, 0x00
     sbc  r25, r18
+__________________________________________________________________________________
 
-    ; Límite MIN = 0x000C (12 ovf)
-    ldi  r19, 0x00             ; Hmin
-    ldi  r18, 0x0C             ; Lmin
-    cp   r25, r19              ; compara H
-    brlo set_min_dec           ; H < Hmin -> saturar
-    brne dec_ok                ; H > Hmin -> OK
-    cp   r24, r18              ; H == Hmin -> compara L
-    brsh dec_ok                ; L ? Lmin -> OK
-set_min_dec:
-    mov  r25, r19              ; saturar a MIN
-    mov  r24, r18
-dec_ok:
-    mov  r27, r25              ; recarga contador con nuevo tiempo
-    mov  r26, r24
-    ori  r21, 0x02             ; set flag DEC
-    rjmp dec_cont
+Derecha_suelto:
+    andi r21, 0xFD             ; clear flag 
 
-dec_suelto:
-    andi r21, 0xFD             ; clear flag DEC al soltar
-
-    ; Decremento del contador y fin de espera
-dec_cont:
-    sbiw r26, 1                ; contador-- (r27:r26)
-    brne espera_loop           ; si !=0, seguir esperando
+_-------------------matriz-----------------_
+esperar_pulso:
+espera_loop:
+    ldi  a, 0x02
+    out  TIFR1, a              ; limpiar OCF1A
+tick:
+    rcall multiplexar_una_vez  ; refresco de 8 filas
+    in   a, TIFR1
+    andi a, 0x02
+    breq tick
+    dec  segundos
+    brne espera_loop
     ret
 
+
+multiplexar_una_vez:
+    ldi  fila, 0
+sig_fila:
+
+    ldi  ZH, high(tabla_figuras<<1)
+    ldi  ZL, low(tabla_figuras<<1)
+
+    mov  d, indice_letras      ; 
+    lsl  d                     ; idx*2 (puntero=2 bytes)
+    add  ZL, d
+    clr  r0
+    adc  ZH, r0
+    lpm  a, Z+                 ; low byte puntero
+    lpm  b, Z                  ; high byte
+    mov  ZL, a
+    mov  ZH, b
+    lsl  ZL                    ; word -> byte address
+    rol  ZH
+
+    add  ZL, fila
+    clr  c
+    adc  ZH, c
+    lpm  columnas, Z           ; byte de columnas de esta fila
+
+    rcall cargar_columnas
+    rcall seleccionar_fila
+    rcall retardo_fila
+    rcall apagar_filas
+    rcall apagar_columnas
+
+    inc  fila
+    cpi  fila, 8
+    brlo sig_fila
+    ret
+
+_______________________________________________________________
+cargar_columnas:
+
+    ; PortB (col 1-4) (alineados)
+    in   a, PORTB
+    andi a, 0xC3               ; limpia PB2..PB5
+    mov  b, columnas
+    andi b, 0x0F               ; nibble bajo = col1 - 4
+    lsl  b
+    lsl  b                     ; <<2 para caer en PB2 - PB5
+    or   a, b
+    out  PORTB, a
+
+_______________________________________________________________________ 
+    ; PortC (col 5-8) (hay que alinearlos)
+    in   a, PORTC
+    andi a, 0xC3               ; limpia PC2..PC5
+    clr  b
+    ; col5(bit4) -> PC5(bit5): “corrimos 1 bit a la izquierda”
+    ; (equivalente a: b5 = columnas.bit4)
+    mov  c, columnas
+    andi c, 0x10               ; aísla bit4
+    lsl  c                      ; 0x10 << 1 = 0x20 (bit5)
+    or   b, c
+
+    ; col6(bit5) -> PC4(bit4): “corrimos 1 bit a la derecha”
+    ; (equivalente a: b4 = columnas.bit5)
+    mov  c, columnas
+    andi c, 0x20               ; aísla bit5
+    lsr  c                      ; 0x20 >> 1 = 0x10 (bit4)
+    or   b, c
+
+    ; col7(bit6) -> PC3(bit3): “corrimos 3 bits a la derecha”
+    ; (equivalente a: b3 = columnas.bit6)
+    mov  c, columnas
+    andi c, 0x40               ; aísla bit6
+    ; corremos columnas 3 bits a la derecha para alinear con PC3
+    lsr  c
+    lsr  c
+    lsr  c
+    or   b, c
+
+    ; col8(bit7) -> PC2(bit2): “corrimos 5 bits a la derecha”
+    ; (equivalente a: b2 = columnas.bit7)
+    mov  c, columnas
+    andi c, 0x80               ; aísla bit7
+    ; corremos columnas 5 bits a la derecha para alinear con PC2
+    lsr  c
+    lsr  c
+    lsr  c
+    lsr  c
+    lsr  c
+    or   b, c
+
+    andi b, 0x3C               ; enmascara sólo PC2..PC5
+    or   a, b
+    out  PORTC, a
+    ret
+______________________________________________________________
+
+_______________________________________________________________
+; filas 0 - 5 -> PD2 - PD7 ; fila 6 -> PB0 ; fila 7 -> PB1
+seleccionar_fila:
+    rcall apagar_filas
+    mov  a, fila
+    cpi  a, 0x06
+    brlo fila_PD
+
+    in   b, PORTB
+    cpi  a, 0x06
+    breq fila_PB0
+    andi b, 0xFD               ; PB1=0 (fila 7)
+    out  PORTB, b
+    ret
+fila_PB0:
+    andi b, 0xFE               ; PB0=0 (fila 6)
+    out  PORTB, b
+    ret
+
+fila_PD:
+    ; PD(2+fila) = 0
+    ldi  b, 0x01
+    add  a, b
+    add  a, b                  ; a = fila + 2
+    in   c, PORTD
+    ldi  d, 0x01
+_________________________________________________________________
+desplazar:
+    dec  a
+    brmi listo
+    lsl  d                     ; d = 1 << (fila+2)
+    rjmp desplazar
+listo:
+    com  d                     ; 0 en el bit a activar
+    and  c, d
+    out  PORTD, c
+    ret
+
+apagar_filas:
+    in   a, PORTD
+    ori  a, 0xFC               ; PD7..PD2=1
+    out  PORTD, a
+    in   a, PORTB
+    ori  a, 0x03               ; PB1..PB0=1
+    out  PORTB, a
+    ret
+
+apagar_columnas:
+    in   a, PORTB
+    andi a, 0xC3               ; PB2..PB5=0
+    out  PORTB, a
+    in   a, PORTC
+    andi a, 0xC3               ; PC2..PC5=0
+    out  PORTC, a
+    ret
+
+retardo_fila:
+    ldi  a, 0x80
+loop_retardo:
+    dec  a
+    brne loop_retardo
+    ret
