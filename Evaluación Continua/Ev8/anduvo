@@ -1,0 +1,321 @@
+;
+; Palabras_en_matriz_8x8.asm
+;
+; Created: 6/9/2025 17:09:39
+; Author : lucas
+;
+
+
+; ===== Matriz 8x8 — Letras con dos botones (izq/der) + LED indicador con antirrebote =====
+; MCU: ATmega328P @16 MHz  |  Arduino UNO
+; Filas:    D2..D9  -> PD2..PD7, PB0..PB1        (fila 1..8, activo-bajo)
+; Columnas: D10..D13-> PB2..PB5 ; A5..A2 -> PC5..PC2  (col 1..8, activo-alto)
+; Botones:  Izquierda=A0(PC0), Derecha=A1(PC1) con pull-up
+; Indicador: PD0 (D0) se enciende un frame cuando se registra el toque
+
+.include "m328pdef.inc"
+
+; ---------- Constantes ----------
+.equ NUM_LETRAS   = 16          ; cantidad en tabla_letras
+.equ BTN_IZQ_BIT  = 0           ; PC0 (A0)
+.equ BTN_DER_BIT  = 1           ; PC1 (A1)
+.equ DEB_FRAMES   = 6           ; antirrebote (frames de bloqueo)
+
+; ---------- Registros ----------
+.def a              = r16
+.def b              = r17
+.def c              = r18
+.def d              = r19
+
+.def fila           = r20       ; 0..7
+.def columnas       = r21       ; patrón de columnas
+.def indice         = r22       ; índice de letra actual
+.def flags          = r23       ; bit0=DER presionado, bit1=IZQ presionado
+.def deb_der        = r24       ; bloqueo derecha
+.def deb_izq        = r25       ; bloqueo izquierda
+
+.cseg
+.org 0x0000
+    rjmp inicio
+
+; ---------- Bitmaps (8 bytes; bit7=col1 .. bit0=col8) ----------
+; Frase: "WHERE IS GOLOLO?"
+.align 2
+W: .db 0b00100010,0b00100010,0b00100010,0b00101010,0b00111110,0b00110110,0b00100010,0b00000000 
+H: .db 0b00100010,0b00100010,0b00100010,0b00111110,0b00100010,0b00100010,0b00100010,0b00000000 
+E: .db 0b00111110,0b00100000,0b00100000,0b00111100,0b00100000,0b00100000,0b00111110,0b00000000 
+R: .db 0b00111100,0b00100010,0b00100010,0b00111100,0b00100100,0b00100010,0b00100010,0b00000000 
+;E: .db 0b00111110,0b01000000,0b01000000,0b00111100,0b01000000,0b01000000,0b00111110,0b00000000
+esp: .db 0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000
+I: .db 0b00111110,0b00001000,0b00001000,0b00001000,0b00001000,0b00001000,0b00111110,0b00000000
+S: .db 0b00011100,0b00100010,0b00100000,0b00011100,0b00000010,0b00100010,0b00011100,0b00000000  
+;esp: .db 0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000
+G: .db 0b00111100,0b01000000,0b01000000,0b01011110,0b01000010,0b01000010,0b00111110,0b00000010 
+O: .db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 
+L: .db 0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00111110,0b00000000 
+;O: .db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 
+;L: .db 0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00100000,0b00111110,0b00000000 
+;O: .db 0b00111100,0b01000010,0b01000010,0b01000010,0b01000010,0b01000010,0b00111100,0b00000000 
+inte: .db 0b00011100,0b00100010,0b00100010,0b00000010,0b00000100,0b00001000,0b00000000,0b00001000 
+
+tabla_letras:
+    .dw W, H, E, R, E, esp, I, S, esp
+    .dw G,O,L,O,L,O,inte
+
+; =================== Inicio ===================
+inicio:
+    ; Stack
+    ldi  a, high(RAMEND)
+    out  SPH, a
+    ldi  a, low(RAMEND)
+    out  SPL, a
+
+    ; Salidas para matriz
+    ldi  a, 0xFC
+    out  DDRD, a
+    ldi  a, 0x3F
+    out  DDRB, a
+    ldi  a, 0x3C
+    out  DDRC, a
+
+    ; LED indicador en PD0
+    sbi  DDRD, 0
+    cbi  PORTD, 0
+
+    ; Botones A0/A1 entradas con pull-up
+    cbi  DDRC, 0
+    cbi  DDRC, 1
+    sbi  PORTC, 0
+    sbi  PORTC, 1
+
+    ; Estado inicial
+    ldi  indice, 0
+    ldi  flags,  0
+    ldi  deb_der, 0
+    ldi  deb_izq, 0
+
+; =================== Loop principal ===================
+main:
+    rcall multiplexar_una_vez
+    rcall leer_botones
+    rjmp  main
+
+; =================== Leer botones (con antirrebote) ===================
+leer_botones:
+    cbi  PORTD, 0                  ; LED OFF por defecto
+
+    ; Descuento de bloqueos
+    tst  deb_der
+    breq no_dec_der
+    dec  deb_der
+no_dec_der:
+    tst  deb_izq
+    breq no_dec_izq
+    dec  deb_izq
+no_dec_izq:
+
+    in   a, PINC                   ; lee PC1..PC0
+
+    ; ---------- Derecha ----------
+    mov  b, a
+    andi b, (1<<BTN_DER_BIT)
+    tst  deb_der
+    brne der_done
+    sbrc flags, 0
+    rjmp der_was_pressed
+    tst  b
+    breq der_press_now
+    rjmp der_done
+der_was_pressed:
+    tst  b
+    breq der_done
+    cbr  flags, (1<<0)
+    ldi  deb_der, DEB_FRAMES
+    inc  indice
+    cpi  indice, NUM_LETRAS
+    brlo der_ok
+    ldi  indice, 0
+der_ok:
+    sbi  PORTD, 0
+    rjmp der_done
+der_press_now:
+    sbr  flags, (1<<0)
+    ldi  deb_der, DEB_FRAMES
+der_done:
+
+    ; ---------- Izquierda ----------
+    mov  b, a
+    andi b, (1<<BTN_IZQ_BIT)
+    tst  deb_izq
+    brne izq_done
+    sbrc flags, 1
+    rjmp izq_was_pressed
+    tst  b
+    breq izq_press_now
+    rjmp izq_done
+izq_was_pressed:
+    tst  b
+    breq izq_done
+    cbr  flags, (1<<1)
+    ldi  deb_izq, DEB_FRAMES
+    tst  indice
+    brne izq_dec
+    ldi  indice, NUM_LETRAS
+izq_dec:
+    dec  indice
+    sbi  PORTD, 0
+    rjmp izq_done
+izq_press_now:
+    sbr  flags, (1<<1)
+    ldi  deb_izq, DEB_FRAMES
+izq_done:
+    ret
+
+; =================== Multiplexar un frame ===================
+multiplexar_una_vez:
+    ldi  fila, 0
+sig_fila:
+    ldi  ZH, high(tabla_letras<<1)
+    ldi  ZL, low(tabla_letras<<1)
+    mov  d, indice
+    lsl  d
+    add  ZL, d
+    clr  r0
+    adc  ZH, r0
+    lpm  a, Z+
+    lpm  b, Z
+    mov  ZL, a
+    mov  ZH, b
+    lsl  ZL
+    rol  ZH
+    add  ZL, fila
+    clr  c
+    adc  ZH, c
+    lpm  columnas, Z
+
+    rcall cargar_columnas
+    rcall seleccionar_fila
+    rcall retardo_fila
+    rcall apagar_filas
+    rcall apagar_columnas
+
+    inc  fila
+    cpi  fila, 8
+    brlo sig_fila
+    ret
+
+; =================== Columnas ===================
+; =================== Cargar columnas (col=1 enciende) ===================
+; Mapeo (bitmap -> pines):
+;   col1..4  (bits7..4) → PB2..PB5   (en orden: bit7→PB2, bit6→PB3, bit5→PB4, bit4→PB5)
+;   col5..8  (bits3..0) → PC5..PC2   (bit3→PC5, bit2→PC4, bit1→PC3, bit0→PC2)
+cargar_columnas:
+    ; --- PORTB (PB2..PB5) para col1..4 (bits7..4) ---
+    in   a, PORTB
+    andi a, 0xC3                 ; limpia PB2..PB5
+    clr  b                       ; acumulador PB2..PB5
+
+    ; bit7 (col1) -> PB2 (bit2): >>5
+    mov  c, columnas
+    andi c, 0x80
+    lsr  c
+    lsr  c
+    lsr  c
+    lsr  c
+    lsr  c
+    or   b, c
+
+    ; bit6 (col2) -> PB3 (bit3): >>3
+    mov  c, columnas
+    andi c, 0x40
+    lsr  c
+    lsr  c
+    lsr  c
+    or   b, c
+
+    ; bit5 (col3) -> PB4 (bit4): >>1
+    mov  c, columnas
+    andi c, 0x20
+    lsr  c
+    or   b, c
+
+    ; bit4 (col4) -> PB5 (bit5): <<1
+    mov  c, columnas
+    andi c, 0x10
+    lsl  c
+    or   b, c
+
+    or   a, b
+    out  PORTB, a
+
+    ; --- PORTC (PC2..PC5) para col5..8 (bits3..0) ---
+    in   a, PORTC
+    andi a, 0xC3                 ; limpia PC2..PC5
+    mov  b, columnas
+    andi b, 0x0F                 ; bits3..0
+    lsl  b
+    lsl  b                       ; <<2: bit3→PC5, bit2→PC4, bit1→PC3, bit0→PC2
+    andi b, 0x3C                 ; sólo PC2..PC5
+    or   a, b
+    out  PORTC, a
+    ret
+
+
+; =================== Filas ===================
+seleccionar_fila:
+    rcall apagar_filas
+    mov  a, fila
+    cpi  a, 0x06
+    brlo fila_PD
+    in   b, PORTB
+    cpi  a, 0x06
+    breq fila_PB0
+    andi b, 0xFD
+    out  PORTB, b
+    ret
+fila_PB0:
+    andi b, 0xFE
+    out  PORTB, b
+    ret
+fila_PD:
+    ldi  b, 0x01
+    add  a, b
+    add  a, b
+    in   c, PORTD
+    ldi  d, 0x01
+shift_bit:
+    dec  a
+    brmi bit_ok
+    lsl  d
+    rjmp shift_bit
+bit_ok:
+    com  d
+    and  c, d
+    out  PORTD, c
+    ret
+
+apagar_filas:
+    in   a, PORTD
+    ori  a, 0xFC
+    out  PORTD, a
+    in   a, PORTB
+    ori  a, 0x03
+    out  PORTB, a
+    ret
+
+apagar_columnas:
+    in   a, PORTB
+    andi a, 0xC3
+    out  PORTB, a
+    in   a, PORTC
+    andi a, 0xC3
+    out  PORTC, a
+    ret
+
+; =================== Retardo ===================
+retardo_fila:
+    ldi  a, 0x80
+retardo_lp:
+    dec  a
+    brne retardo_lp
+    ret
