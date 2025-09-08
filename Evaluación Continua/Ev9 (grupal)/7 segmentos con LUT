@@ -1,4 +1,30 @@
 .include "m328pdef.inc"
+; Constantes
+.equ T1_PRE_1S     = 3036
+
+.equ BTN_START_BIT = 0        ; PB0
+.equ BTN_STOP_BIT  = 1        ; PB1
+.equ BTN_MASK      = (1<<BTN_START_BIT)|(1<<BTN_STOP_BIT)
+
+; Base de la LUT en SRAM (como pide el profe: cargado con ST Y+)
+.equ LUT_BASE_L    = 0x00     ; LOW(0x0100)
+.equ LUT_BASE_H    = 0x01     ; HIGH(0x0100)
+
+;RAM - variables
+.dseg
+.org 0x0110                ; dejamos 0x0100.. para la LUT (0x0100..0x0109)
+estado:     .byte 1        ; 0=parado, 1=andando
+contador:   .byte 1        ; 0..9
+prev_pb:    .byte 1        ; estado previo de PB1:0 (para flancos)
+
+;Código
+.cseg
+.org 0x0000
+rjmp RESET
+
+; Vector Timer1 OVF
+.org 0x001A
+rjmp TIMER1_OVF_ISR 
 
 RESET:
     ; Stack Pointer
