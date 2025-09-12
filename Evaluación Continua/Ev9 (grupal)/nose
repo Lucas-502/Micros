@@ -1,0 +1,200 @@
+; ====== Laboratorio 1 - Parte A (GPIO + temporizaciones) ======
+; MCU: ATmega328P @16 MHz  |  Toolchain: AVRASM / AVR-GCC ASM
+; Mapeo de pines (según consigna del usuario):
+; - M1 (cinta): D6 (PD6) y D9 (PB1)
+; - M2 (punzón): D10 (PB2) y D11 (PB3)
+; - Sensores:   A2=PC2 (inicio), A1=PC1 (posicionado)  [entradas con pull-up]
+; - LEDs:       A3=PC3 (RUN),    A4=PC4 (FIN)
+
+.include "m328pdef.inc"
+
+; ---------- Constantes de tiempo (Timer1 CTC, prescaler 1024) ----------
+; fclk = 16 MHz -> tick = 64 us -> 1 s ≈ 15625 ticks -> OCR1A = 15624
+.equ OCR1A_1S = 15624
+
+; Perfil "ligero" del enunciado:
+.equ T_FEED    = 3      ; alimentar 3 s
+.equ T_PAUSE   = 2      ; pausa 2 s (tras posicionar, si se usa)
+.equ T_HOLD    = 2      ; mantener presión 2 s
+.equ T_UNLOAD  = 3      ; descarga 3 s
+
+; ---------- Bits (alias legibles) ----------
+.equ M1_A_BIT  = PD6     ; D6  (PORTD bit6)
+.equ M1_B_BIT  = PB1     ; D9  (PORTB bit1)
+
+.equ M2_A_BIT  = PB2     ; D10 (PORTB bit2)
+.equ M2_B_BIT  = PB3     ; D11 (PORTB bit3)
+
+.equ S_INI_BIT = PC2     ; A2  (PINC bit2)
+.equ S_POS_BIT = PC1     ; A1  (PINC bit1)
+
+.equ LED_RUN   = PC3     ; A3
+.equ LED_FIN   = PC4     ; A4
+
+; ---------- Registros de trabajo ----------
+.def t0   = r16
+.def secs = r17
+
+; ---------- Reset vector ----------
+.cseg
+.org 0x0000
+    rjmp INICIO
+
+; ===============================================================
+; INIT
+; ===============================================================
+INICIO:
+    ; Stack
+    ldi  t0, high(RAMEND)
+    out  SPH, t0
+    ldi  t0, low(RAMEND)
+    out  SPL, t0
+
+    ; --- GPIO direcciones ---
+    ; M1: PD6 salida
+    sbi  DDRD, M1_A_BIT
+    ; M1: PB1 salida
+    sbi  DDRB, M1_B_BIT
+
+    ; M2: PB2 y PB3 salida
+    sbi  DDRB, M2_A_BIT
+    sbi  DDRB, M2_B_BIT
+
+    ; LEDs: PC3 y PC4 salida
+    sbi  DDRC, LED_RUN
+    sbi  DDRC, LED_FIN
+
+    ; Sensores: PC1 y PC2 entrada con pull-up
+    cbi  DDRC, S_POS_BIT
+    cbi  DDRC, S_INI_BIT
+    sbi  PORTC, S_POS_BIT      ; pull-up ON
+    sbi  PORTC, S_INI_BIT      ; pull-up ON
+
+    ; Apagar todo al inicio
+    rcall M1_STOP
+    rcall M2_OFF
+    cbi   PORTC, LED_RUN
+    cbi   PORTC, LED_FIN
+
+    ; --- Timer1 en CTC, prescaler 1024, OCR1A=1s ---
+    ldi  t0, (1<<WGM12)
+    sts  TCCR1B, t0
+    ldi  t0, high(OCR1A_1S)
+    sts  OCR1AH, t0
+    ldi  t0, low(OCR1A_1S)
+    sts  OCR1AL, t0
+    ldi  t0, (1<<CS12)|(1<<CS10)  ; /1024
+    sts  TCCR1B, t0
+
+; ===============================================================
+; FSM simple: ESPERA → ALIMENTAR (hasta POS) → PUNZONAR → DESCARGA → FIN
+; ===============================================================
+
+ESPERA_INICIO:
+    ; Esperar sensor de inicio (activo=0)
+    sbic PINC, S_INI_BIT     ; si está en 1 (no activo), saltar
+    rjmp GOT_START
+    rjmp ESPERA_INICIO
+
+GOT_START:
+    sbi  PORTC, LED_RUN      ; RUN ON
+
+; --- ALIMENTACIÓN: cinta hasta sensor POS (con timeout opcional de 5 s) ---
+    rcall M1_FWD
+    ; Correr hasta que PC1 caiga a 0 (posicionado)
+ALIM_LOOP:
+    ; leer sensor posicionado
+    sbic PINC, S_POS_BIT     ; si 1 => aún no posicionado
+    rjmp ALIM_LOOP
+    ; llegó la pieza
+    rcall M1_STOP
+
+; (opcional pausa de estabilización)
+    ldi  secs, T_PAUSE
+    rcall WAIT_S
+
+; --- PUNZONADO: bajar 1 s, mantener 2 s, subir 1 s ---
+    rcall PUNCH_DOWN
+    ldi  secs, 1
+    rcall WAIT_S
+
+    rcall PUNCH_HOLD
+    ldi  secs, T_HOLD
+    rcall WAIT_S
+
+    rcall PUNCH_UP
+    ldi  secs, 1
+    rcall WAIT_S
+    rcall M2_OFF
+
+; --- DESCARGA: cinta 3 s ---
+    rcall M1_FWD
+    ldi  secs, T_UNLOAD
+    rcall WAIT_S
+    rcall M1_STOP
+
+; Fin de ciclo
+    cbi  PORTC, LED_RUN
+    sbi  PORTC, LED_FIN
+FIN_CICLO:
+    rjmp FIN_CICLO           ; queda detenido (una pieza). Para lazo continuo, vuelve a ESPERA_INICIO.
+
+; ===============================================================
+; Subrutinas de MOTORES
+; ===============================================================
+
+; M1_FORWARD: PD6=1, PB1=0  (ajustar si tu puente requiere otra polaridad)
+M1_FWD:
+    sbi  PORTD, M1_A_BIT
+    cbi  PORTB, M1_B_BIT
+    ret
+
+; M1_STOP: ambas en 0 (freno libre). Para freno activo poné una alta/otra alta según driver.
+M1_STOP:
+    cbi  PORTD, M1_A_BIT
+    cbi  PORTB, M1_B_BIT
+    ret
+
+; M2_DOWN: PB2=1, PB3=0
+PUNCH_DOWN:
+    sbi  PORTB, M2_A_BIT
+    cbi  PORTB, M2_B_BIT
+    ret
+
+; M2_HOLD: mantiene mismo sentido (ambas en estado que sostenga). Si tu actuador es solenoide, igual a DOWN.
+PUNCH_HOLD:
+    sbi  PORTB, M2_A_BIT
+    cbi  PORTB, M2_B_BIT
+    ret
+
+; M2_UP: PB2=0, PB3=1
+PUNCH_UP:
+    cbi  PORTB, M2_A_BIT
+    sbi  PORTB, M2_B_BIT
+    ret
+
+; M2_OFF: ambas 0
+M2_OFF:
+    cbi  PORTB, M2_A_BIT
+    cbi  PORTB, M2_B_BIT
+    ret
+
+; ===============================================================
+; WAIT_S: espera 'secs' segundos usando Timer1 CTC (1 s por iteración)
+; regs: usa t0
+WAIT_S:
+    tst  secs
+    breq .+4
+WAIT_1S:
+    ; esperar flag OCF1A
+WFLAG:
+    lds  t0, TIFR1
+    sbrs t0, OCF1A
+    rjmp WFLAG
+    ; limpiar flag
+    ldi  t0, (1<<OCF1A)
+    sts  TIFR1, t0
+    ; siguiente segundo
+    dec  secs
+    brne WAIT_1S
+    ret
