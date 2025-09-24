@@ -5,6 +5,15 @@
     rjmp RESET                      
 .org 0x0034
 
+.def temp         = r16
+.def temp2        = r15
+.def estado       = r17
+.def contador_L   = r18
+.def contador_H   = r19
+.def contador_M   = r20
+.def tipo_carga   = r21
+.def usart_data   = r22
+
 ; Estados
 .equ EN_ESPERA     = 1
 .equ ALIMENTACION  = 2
