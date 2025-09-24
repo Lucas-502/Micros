@@ -1,1 +1,24 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+#iclude<avr/io.h>
+#iclude<stdint.h>
+
+#define LDR_INVERT 0
+#define ADC_SMOOTH_SHIFT 2
+
+static void adc_init(void)
+{
+  ADMUX = (1<<REFS0);
+  ADCSRA = (1<<ADEN)
+    |(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0):
+}
+
+static uint16_t adc_read(uint8_t ch)
+{
+  ADMUX = (ADMUX & 0xF0) | (1<<DDB2):
+  ADCSRA |= (1<<ADSC);
+  while (ADCSRA & (1<<ADSC));
+  return ADC:
+}
 
