@@ -1,1 +1,254 @@
+.include "m328pdef.inc"                
 
+
+
+; sería 0 = circulo, 1= cruz, 2 = triangulo y todas = 3
+.equ FIG_CIRC    = 0
+.equ FIG_CRUZ    = 1
+.equ FIG_TRIANG  = 2
+.equ FIG_TODAS   = 3
+; r17 = selección actual (0..3)
+
+
+; ----------------- Pines (PORTD 2..7) – ACTIVO-BAJO -----------------
+.equ Z_Up   = 0x02       ; D2 -> Z?
+.equ Z_Down = 0x03       ; D3 -> Z?
+.equ Y_pos  = 0x04       ; D4 -> +Y
+.equ Y_neg  = 0x05       ; D5 -> ?Y
+.equ X_neg  = 0x06       ; D6 -> ?X
+.equ X_pos  = 0x07       ; D7 -> +X
+
+.cseg
+.org 0x0001
+
+rjmp Inicio
+
+Inicio:
+; Stack pointer
+    ldi  r16, high(RAMEND)     ; ldi: carga inmediata
+    out  SPH, r16              ; out: escribe en IO
+    ldi  r16, low(RAMEND)
+    out  SPL, r16
+
+; Configuramos como salida
+	ldi r16, 0b11111100       
+	out DDRD, r16
+
+;	Timer0 CTC = 1 ms
+    ldi  r16, 0
+    out  TCCR0A, r16
+    ldi  r16, (1<<WGM01)          ; CTC por OCR0A
+    out  TCCR0A, r16
+    ldi  r16, 249                 ; 250 ticks ? 1 ms
+    out  OCR0A,  r16
+    ldi  r16, (1<<CS01)|(1<<CS00) ; prescaler 64
+    out  TCCR0B, r16
+    ldi  r16, (1<<OCF0A)          ; limpia flag
+    out  TIFR0,  r16
+
+	rjmp Main 
+
+; Timer0 CTC: 1 ms 
+timer:
+    ldi  r16, (1<<OCF0A)          ; borra flag ? inicia ventana de 1 ms
+    out  TIFR0, r16
+loop0:
+    in   r16, TIFR0
+    sbrs r16, OCF0A               ; espera compare
+    rjmp loop0
+    ret
+
+;Espera N ms (r24 = N) 
+Esperar:
+    sbiw r24, 0                 ; ¿N==0?
+    brne loop1          ; si N>0, entra al bucle
+    ret                         ; si N==0, retorna
+loop1:
+    rcall timer                 ; 1 ms
+    sbiw r24, 1                 ; N--
+    brne loop1          ; mientras N!=0
+    ret
+; Funciones para el control del plotter
+;______________________________________________________
+Lapiz_down:
+    cbi  PORTD, Z_Down
+	sbi  PORTD, Z_Up 
+    ret
+
+
+Lapiz_up:
+    cbi  PORTD, Z_Up 
+    sbi  PORTD, Z_Down  
+    ret
+
+Mover_der:
+    sbi PORTD, X_neg       ; -X OFF (1)
+    cbi PORTD, X_pos       ; +X ON  (0)
+    rcall Esperar          ; espera N ms (r25:r24)
+    sbi PORTD, X_pos       ; +X OFF (1)
+    ret
+
+Mover_izq:                 ; -X (izquierda)
+    sbi PORTD, X_pos       ; +X OFF
+    cbi PORTD, X_neg       ; -X ON
+    rcall Esperar
+    sbi PORTD, X_neg       ; -X OFF
+    ret
+
+; -------- Y --------
+Mover_arr:                 ; +Y (arriba)
+    sbi PORTD, Y_neg       ; -Y OFF
+    cbi PORTD, Y_pos       ; +Y ON
+    rcall Esperar
+    sbi PORTD, Y_pos       ; +Y OFF
+    ret
+
+Mover_abb:                 ; -Y (abajo)
+    sbi PORTD, Y_pos       ; +Y OFF
+    cbi PORTD, Y_neg       ; -Y ON
+    rcall Esperar
+    sbi PORTD, Y_neg       ; -Y OFF
+    ret
+
+Mover_diag_abb_izq:
+    sbi PORTD, Y_pos       ; +Y OFF
+    sbi PORTD, X_pos       ; +X OFF
+    cbi PORTD, Y_neg       ; -Y ON
+    cbi PORTD, X_neg       ; -X ON
+    rcall Esperar
+    sbi PORTD, Y_neg       ; -Y OFF
+    sbi PORTD, X_neg       ; -X OFF
+    ret
+
+; 45° arriba-izquierda (+Y, ?X)
+Mover_diag_arr_izq:
+    sbi PORTD, Y_neg       ; -Y OFF
+    sbi PORTD, X_pos       ; +X OFF
+    cbi PORTD, Y_pos       ; +Y ON
+    cbi PORTD, X_neg       ; -X ON
+    rcall Esperar
+    sbi PORTD, Y_pos       ; +Y OFF
+    sbi PORTD, X_neg       ; -X OFF
+    ret
+;______________________________________________________
+
+Hacer_trangulo:
+
+	rcall Lapiz_down
+
+	ldi  r24, low(300)  
+    ldi  r25, high(300)
+	rcall Esperar
+
+    ; 45° abajo-izquierda
+    ldi  r24, low(2000)
+    ldi  r25, high(2000)
+    rcall Mover_diag_abb_izq
+
+	ldi  r24, low(300)  
+    ldi  r25, high(300)
+	rcall Esperar
+
+    ; derecha
+    ldi  r24, low(4000)
+    ldi  r25, high(4000)
+    rcall Mover_der
+
+	ldi  r24, low(300)  
+    ldi  r25, high(300)
+	rcall Esperar
+
+    ; 45° arriba-izquierda
+    ldi  r24, low(2050)
+    ldi  r25, high(2050)
+    rcall Mover_diag_arr_izq
+
+	rcall Lapiz_up
+
+    ret
+
+; ____________________________
+
+Hacer_Cruz:    
+	rcall Lapiz_down
+
+	ldi  r24, low(300)  
+    ldi  r25, high(300)
+	rcall Esperar
+
+    ; 45° abajo-izquierda
+    ldi  r24, low(2000)
+    ldi  r25, high(2000)
+    rcall Mover_diag_abb_izq
+
+	rcall Lapiz_up
+
+	    ; derecha
+    ldi  r24, low(2000)
+    ldi  r25, high(2000)
+    rcall Mover_der
+
+	rcall Lapiz_down
+
+	ldi  r24, low(300)  
+    ldi  r25, high(300)
+	rcall Esperar
+
+    ; 45° arriba-izquierda
+    ldi  r24, low(2000)
+    ldi  r25, high(2000)
+    rcall Mover_diag_arr_izq
+
+	rcall Lapiz_up
+
+	ret
+
+Hacer_circulo:
+	ret
+
+;Usando x^2 + y^2 = r  Hacer_circulo:  ret
+
+Hacer_Todas:   
+	ret
+
+;_________
+Main:
+	;Elige una figura de forma manual
+	ldi r17, 01
+    ; Pre-posicionamiento
+
+    ldi  r24, low(3000)
+    ldi  r25, high(3000)
+    rcall Mover_izq
+
+    ldi  r24, low(3000)
+    ldi  r25, high(3000)
+    rcall Mover_abb
+
+    ldi  r24, low(500)  ;pausa antes de hacer una figura
+    ldi  r25, high(500)
+	rcall Esperar
+
+	;Bucle de selección de figura
+	cpi  r17, FIG_TODAS
+	breq Hacer_Todas
+
+	cpi  r17, FIG_TRIANG
+	breq Hacer_trangulo
+
+	cpi  r17, FIG_CRUZ
+	breq Hacer_Cruz
+
+	cpi  r17, FIG_CIRC
+	breq Hacer_circulo
+
+	rjmp Main
+	
+;__________
+
+;UART
+;__________________________________________
+
+;triangulo
+;cruz
+;circulo
