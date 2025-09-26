@@ -32,3 +32,15 @@
 .equ CINTA_PIN2     = PB1    ; D9
 .equ PUNZON_PIN1    = PD4    ; D4
 .equ PUNZON_PIN2    = PB0    ; D8
+
+; Botón de inicio en A1
+.equ BOTON_INICIO   = PC1    ; A1 (PC1)
+
+; LEDs de estado
+.equ LED_ESPERA       = PB2  ; D10
+.equ LED_FUNCIONANDO  = PB3  ; D11
+.equ LED_FIN_CICLO    = PB4  ; D12
+
+; UART a 200000 bps @16 MHz (modo normal, U2X=0)
+.equ BAUD      = 9600
+.equ UBRR_VAL = (16000000/(16*BAUD))-1   ; = 103
