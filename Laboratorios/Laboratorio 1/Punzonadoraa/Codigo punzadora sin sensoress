@@ -65,3 +65,118 @@ RESET:
     ldi ZH, HIGH(MSG_INICIO*2)
     ldi ZL, LOW(MSG_INICIO*2)
     rcall ENVIAR_STRING
+
+MAIN_LOOP:
+    rcall PROCESAR_USART
+
+    mov  temp, estado
+    subi temp, 1                         ; 1..6 -> 0..5
+    ldi  ZH, HIGH(TABLA_ESTADOS)         ; SIN *2 (IJMP usa direcciones de palabra)
+    ldi  ZL, LOW(TABLA_ESTADOS)
+    add  ZL, temp
+    adc  ZH, r1
+    ijmp
+
+TABLA_ESTADOS:
+    rjmp ESTADO_EN_ESPERA
+    rjmp ESTADO_ALIMENTACION
+    rjmp ESTADO_POSICIONADO
+    rjmp ESTADO_PUNZONADO
+    rjmp ESTADO_DESCARGA
+    rjmp ESTADO_FIN_CICLO
+
+; ------------------ Estados ------------------
+ESTADO_EN_ESPERA:
+    rcall LED_ESPERA_ON
+
+    ; Botón A1 (PC1) con pull-up: 0=presionado
+    sbic PINC, BOTON_INICIO             ; si 0, salta la próxima
+    rjmp MAIN_LOOP                      ; si NO está presionado, seguir esperando
+
+    rcall DELAY_50MS                    ; debounce
+
+ESPERAR_SOLTAR:
+    sbis PINC, BOTON_INICIO             ; salta si 1 (soltado)
+    rjmp ESPERAR_SOLTAR
+
+    ldi estado, ALIMENTACION
+    ldi ZH, HIGH(MSG_ALIM*2)
+    ldi ZL, LOW(MSG_ALIM*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
+
+ESTADO_ALIMENTACION:
+    rcall LED_FUNCIONANDO_ON
+    rcall DETENER_PUNZON
+    rcall AVANZAR_CINTA
+
+    rcall GET_TIEMPO_AVANCE             ; según tipo_carga
+    rcall DELAY_PARAMETRICO
+
+    rcall DETENER_CINTA
+    rcall DELAY_50MS
+
+    ldi estado, POSICIONADO
+    ldi ZH, HIGH(MSG_POS*2)
+    ldi ZL, LOW(MSG_POS*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
+
+ESTADO_POSICIONADO:
+    rcall DETENER_TODO
+
+    rcall GET_TIEMPO_PAUSA
+    rcall DELAY_PARAMETRICO
+
+    ldi estado, PUNZONADO
+    ldi ZH, HIGH(MSG_PUNZ*2)
+    ldi ZL, LOW(MSG_PUNZ*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
+
+ESTADO_PUNZONADO:
+    rcall DETENER_CINTA
+
+    rcall BAJAR_PUNZON
+    ldi temp, 20                        ; 1 s (20×50 ms)
+    rcall DELAY_PARAMETRICO
+
+    rcall DETENER_PUNZON
+    rcall GET_TIEMPO_PRESION
+    rcall DELAY_PARAMETRICO
+
+    rcall SUBIR_PUNZON
+    ldi temp, 20
+    rcall DELAY_PARAMETRICO
+
+    rcall DETENER_PUNZON
+    rcall DELAY_50MS
+
+    ldi estado, DESCARGA
+    ldi ZH, HIGH(MSG_DESC*2)
+    ldi ZL, LOW(MSG_DESC*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
+ESTADO_DESCARGA:
+    rcall DETENER_PUNZON
+    rcall RETROCEDER_CINTA              ; reversa: PB1=1, PD6=0
+    ldi temp, 60                        ; 3 s
+    rcall DELAY_PARAMETRICO
+    rcall DETENER_CINTA
+
+    ldi estado, FIN_CICLO
+    ldi ZH, HIGH(MSG_FIN*2)
+    ldi ZL, LOW(MSG_FIN*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
+
+ESTADO_FIN_CICLO:
+    rcall LED_FIN_CICLO_ON
+    ldi temp, 40                        ; 2 s
+    rcall DELAY_PARAMETRICO
+
+    ldi estado, EN_ESPERA
+    ldi ZH, HIGH(MSG_ESPERA*2)
+    ldi ZL, LOW(MSG_ESPERA*2)
+    rcall ENVIAR_STRING
+    rjmp MAIN_LOOP
