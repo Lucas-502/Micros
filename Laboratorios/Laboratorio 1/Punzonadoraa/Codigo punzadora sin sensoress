@@ -180,3 +180,157 @@ ESTADO_FIN_CICLO:
     ldi ZL, LOW(MSG_ESPERA*2)
     rcall ENVIAR_STRING
     rjmp MAIN_LOOP
+
+; ------------------ Configuración y UART ------------------
+CONFIG_PUERTOS:
+    ; PORTD: PD6, PD4 salidas
+    in  temp, DDRD
+    sbr temp, (1<<PD6)|(1<<PD4)
+    out DDRD, temp
+    ; PORTB: PB0, PB1, PB2-4 salidas
+    in  temp, DDRB
+    sbr temp, (1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)|(1<<PB4)
+    out DDRB, temp
+    ; PORTC: PC1 entrada con pull-up (botón A1)
+    in  temp, DDRC
+    cbr temp, (1<<PC1)
+    out DDRC, temp
+    in  temp, PORTC
+    sbr temp, (1<<PC1)
+    out PORTC, temp
+    ; Apagar salidas al inicio
+    clr temp
+    out PORTB, temp
+    in  temp, PORTD
+    cbr temp, (1<<PD6)|(1<<PD4)
+    out PORTD, temp
+    ret
+
+USART_INIT:
+    ldi temp, 0
+    sts UCSR0A, temp            ; U2X=0
+    ldi temp, HIGH(UBRR_VAL)
+    sts UBRR0H, temp
+    ldi temp, LOW(UBRR_VAL)
+    sts UBRR0L, temp
+    ldi temp, (1<<RXEN0)|(1<<TXEN0)
+    sts UCSR0B, temp
+    ldi temp, (1<<UCSZ01)|(1<<UCSZ00)    ; 8N1
+    sts UCSR0C, temp
+	ret
+
+USART_TRANSMIT:
+    lds temp2, UCSR0A
+    sbrs temp2, UDRE0
+    rjmp USART_TRANSMIT
+    sts UDR0, usart_data
+    ret
+
+ENVIAR_STRING:
+ENVIAR_CHAR:
+    lpm usart_data, Z+
+    tst usart_data
+    breq FIN_STRING
+    rcall USART_TRANSMIT
+    rjmp ENVIAR_CHAR
+FIN_STRING:
+    ret
+
+PROCESAR_USART:
+    lds temp, UCSR0A
+    sbrs temp, RXC0
+    ret
+    lds usart_data, UDR0
+
+    cpi usart_data, 'A'    ; iniciar por serie si está en ESPERA
+    breq CMD_INICIO
+    cpi usart_data, '1'
+    breq CMD_CARGA1
+    cpi usart_data, '2'
+    breq CMD_CARGA2
+    cpi usart_data, '3'
+    breq CMD_CARGA3
+    ret
+
+CMD_INICIO:
+    cpi estado, EN_ESPERA
+    brne FIN_CMD
+    ldi estado, ALIMENTACION
+    ldi ZH, HIGH(MSG_ALIM*2)
+    ldi ZL, LOW(MSG_ALIM*2)
+    rcall ENVIAR_STRING
+FIN_CMD:
+    ret
+
+CMD_CARGA1:
+    ldi tipo_carga, 1
+    rjmp ENVIAR_CARGA_MSG
+CMD_CARGA2:
+    ldi tipo_carga, 2
+    rjmp ENVIAR_CARGA_MSG
+CMD_CARGA3:
+    ldi tipo_carga, 3
+    rjmp ENVIAR_CARGA_MSG
+
+ENVIAR_CARGA_MSG:
+    ldi ZH, HIGH(MSG_CARGA*2)
+    ldi ZL, LOW(MSG_CARGA*2)
+    rcall ENVIAR_STRING
+    mov  usart_data, tipo_carga
+    ldi  temp, '0'
+    add  usart_data, temp
+    rcall USART_TRANSMIT
+    ldi  usart_data, 13
+    rcall USART_TRANSMIT
+    ldi  usart_data, 10
+    rcall USART_TRANSMIT
+    ret
+
+; ------------------ Timing ------------------
+GET_TIEMPO_AVANCE:
+    ldi ZH, HIGH(TABLA_AVANCE*2)
+    ldi ZL, LOW(TABLA_AVANCE*2)
+    rjmp GET_TIEMPO_TABLA
+GET_TIEMPO_PAUSA:
+    ldi ZH, HIGH(TABLA_PAUSA*2)
+    ldi ZL, LOW(TABLA_PAUSA*2)
+    rjmp GET_TIEMPO_TABLA
+GET_TIEMPO_PRESION:
+    ldi ZH, HIGH(TABLA_PRESION*2)
+    ldi ZL, LOW(TABLA_PRESION*2)
+    rjmp GET_TIEMPO_TABLA
+
+GET_TIEMPO_TABLA:
+    mov temp2, tipo_carga
+    dec temp2
+    add ZL, temp2
+    adc ZH, r1
+    lpm temp, Z
+    ret
+
+; temp = N (N×50 ms)
+DELAY_PARAMETRICO:
+    tst temp
+    breq FIN_DELAY_PARAM
+DL_LOOP:
+    rcall DELAY_50MS
+    dec  temp
+    brne DL_LOOP
+FIN_DELAY_PARAM:
+    ret
+
+; ~50 ms @16 MHz (ajustable: cambiar contador_M 3..5)
+DELAY_50MS:
+    ldi contador_M, 4
+D50_1:
+    ldi contador_H, 255
+D50_2:
+    ldi contador_L, 255
+D50_3:
+    dec contador_L
+    brne D50_3
+    dec contador_H
+    brne D50_2
+    dec contador_M
+    brne D50_1
+    ret
