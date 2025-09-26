@@ -334,3 +334,99 @@ D50_3:
     dec contador_M
     brne D50_1
     ret
+; ------------------ Motores y LEDs ------------------
+AVANZAR_CINTA:
+    rcall DETENER_PUNZON
+    in  temp, PORTD
+    sbr temp, (1<<CINTA_PIN1)       ; PD6=1
+    out PORTD, temp
+    in  temp, PORTB
+    cbr temp, (1<<CINTA_PIN2)       ; PB1=0
+    out PORTB, temp
+    ret
+
+RETROCEDER_CINTA:
+    in  temp, PORTD
+    cbr temp, (1<<CINTA_PIN1)       ; PD6=0
+    out PORTD, temp
+    in  temp, PORTB
+    sbr temp, (1<<CINTA_PIN2)       ; PB1=1
+    out PORTB, temp
+    ret
+
+DETENER_CINTA:
+    in  temp, PORTD
+    cbr temp, (1<<CINTA_PIN1)
+    out PORTD, temp
+    in  temp, PORTB
+    cbr temp, (1<<CINTA_PIN2)
+    out PORTB, temp
+    ret
+
+BAJAR_PUNZON:
+    rcall DETENER_CINTA
+    in  temp, PORTD
+    sbr temp, (1<<PUNZON_PIN1)      ; PD4=1
+    out PORTD, temp
+    in  temp, PORTB
+    cbr temp, (1<<PUNZON_PIN2)      ; PB0=0
+    out PORTB, temp
+    ret
+
+SUBIR_PUNZON:
+    rcall DETENER_CINTA
+    in  temp, PORTD
+    cbr temp, (1<<PUNZON_PIN1)      ; PD4=0
+    out PORTD, temp
+    in  temp, PORTB
+    sbr temp, (1<<PUNZON_PIN2)      ; PB0=1
+    out PORTB, temp
+    ret
+
+DETENER_PUNZON:
+    in  temp, PORTD
+    cbr temp, (1<<PUNZON_PIN1)
+    out PORTD, temp
+    in  temp, PORTB
+    cbr temp, (1<<PUNZON_PIN2)
+    out PORTB, temp
+    ret
+
+DETENER_TODO:
+    rcall DETENER_CINTA
+    rcall DETENER_PUNZON
+    ret
+
+LED_ESPERA_ON:
+    in  temp, PORTB
+    sbr temp, (1<<LED_ESPERA)
+    cbr temp, (1<<LED_FUNCIONANDO)|(1<<LED_FIN_CICLO)
+    out PORTB, temp
+    ret
+LED_FUNCIONANDO_ON:
+    in  temp, PORTB
+    sbr temp, (1<<LED_FUNCIONANDO)
+    cbr temp, (1<<LED_ESPERA)|(1<<LED_FIN_CICLO)
+    out PORTB, temp
+    ret
+LED_FIN_CICLO_ON:
+    in  temp, PORTB
+    sbr temp, (1<<LED_FIN_CICLO)
+    cbr temp, (1<<LED_ESPERA)|(1<<LED_FUNCIONANDO)
+    out PORTB, temp
+    ret
+
+; ------------------ Datos en FLASH (pares para evitar warnings) ------------------
+; Tiempos en unidades de 50 ms (agrego filler 0)
+TABLA_AVANCE:   .db 60, 80, 100, 0
+TABLA_PAUSA:    .db 40, 40, 60, 0
+TABLA_PRESION:  .db 40, 60, 80, 0
+
+MSG_INICIO: .db "INICIO", 13, 10, 0, 0
+MSG_ESPERA: .db "ESPERA", 13, 10, 0, 0
+MSG_ALIM:   .db "ALIM",   13, 10, 0, 0
+MSG_POS:    .db "POS",    13, 10, 0
+MSG_PUNZ:   .db "PUNZ",   13, 10, 0, 0
+MSG_DESC:   .db "DESC",   13, 10, 0, 0
+MSG_FIN:    .db "FIN",    13, 10, 0
+MSG_CARGA:  .db "CARGA:", 0, 0
