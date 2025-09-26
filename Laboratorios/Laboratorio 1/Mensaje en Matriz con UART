@@ -1,27 +1,42 @@
 .include "m328pdef.inc"
 
-; Constantes
-.equ DELAY_SCROLL = 250         ; velocidad del scroll (ajustable)
-.equ NUM_LETRAS   = 14
-.equ COL_VACIA    = 0x00       ; columna vacía entre letras
+;Constantes___________________________________________________________________
+.equ F_CPU           = 16000000                 ; frecuencia CPU
+.equ BAUD            = 9600
+.equ UBRR0_VAL       = (F_CPU/(16*BAUD) - 1)    ; divisor 16x
 
-; Registros
-.def temp     = r16
-.def temp2    = r17
-.def temp3    = r18
-.def temp4    = r19
-.def fila     = r20            ; 
-.def columnas = r21            ; patrón de columnas actual
-.def indice_letra = r22        ; índice de la letra actual
-.def col_letra    = r23        ; columna dentro de la letra 
-.def contador_delay = r24      ; para el retardo del scroll
-.def buffer_col = r25          ; buffer para la columna entrante
+.equ DELAY_SCROLL    = 250                      ; retardo inicial (ticks)
+.equ NUM_LETRAS      = 14
+.equ COL_VACIA       = 0x00
+
+.equ NUM_FIGURAS     = 5                        ; cantidad en tabla_figuras
+.equ VEL_MIN         = 5                       ; límites de velocidad (retardo)
+.equ VEL_MAX         = 250
+.equ VEL_PASO        = 30
+.equ VEL_MIN_SAT     = VEL_MIN + VEL_PASO       ; saturar antes de restar
+.equ VEL_MAX_SAT     = VEL_MAX - VEL_PASO       ; saturar antes de sumar
+
+.equ MODO_MENSAJE    = 0
+.equ MODO_FIGURAS    = 1
+
+;Registros____________________________________________________________________
+.def temp            = r16
+.def temp2           = r17
+.def temp3           = r18
+.def temp4           = r19
+.def fila            = r20
+.def columnas        = r21
+
+.def indice_letra    = r22                      ; índice de letra actual (mensaje)
+.def col_letra       = r23                      ; columna dentro de la letra (0..8)
+.def contador_delay  = r24                      ; temporizador de paso
+.def buffer_col      = r25                      ; uso general
 
 .cseg
 .org 0x0000
     rjmp inicio
 
-; Bitmaps (8 bytes por letra, bit7=col1 .. bit0=col8)
+;Mensaje____________________________________________________________________________________
 .align 2
 inte0: .db 0b001000,0b000000,0b001000,0b010000,0b100000,0b100010,0b100010,0b011100
 H:     .db 0b100010,0b100010,0b100010,0b111110,0b100010,0b100010,0b100010,0b000000 
@@ -37,6 +52,7 @@ inte:  .db 0b011100,0b100010,0b100010,0b000010,0b000100,0b001000,0b000000,0b0010
 tabla_letras:
     .dw inte0,H,I,J,O,esp,D1,E,esp,D1,I,O,S,inte
 
+;Figuras____________________________________________________________________________________________________
 .align 2
 CARITA_FELIZ:
     .db 0b00000000,0b00100100,0b00100100,0b00100100,0b10000001,0b01000010,0b00111100,0b00000000
@@ -52,12 +68,25 @@ ALIEN:
 tabla_figuras:
     .dw CARITA_FELIZ, CARITA_TRISTE, ROMBO, CORAZON, ALIEN
 
-; Buffer en RAM para las 8 filas actuales de la matriz
+;Mensajes UART________________________________________________________________________________________
+ms_crlf:        .db 13,10,0,0
+ms_banner:      .db 13,10,"=== Visualizer UART ===",13,10,0
+ms_ayuda1:      .db "Comandos: M=Mensaje, F=Figuras, +=Mas rapido, -=Mas lento, ?=Ayuda",13,10,0,0
+ms_estado:      .db "Estado:",13,10,0
+ms_modo_msg:    .db "  Modo: MENSAJE",13,10,0
+ms_modo_fig:    .db "  Modo: FIGURAS",13,10,0
+ms_vel:         .db "  Retardo: ",0
+
+;variables___________________________________________________________________________________________
 .dseg
 .org 0x0100
-matriz_buffer: .byte 8          ; 8 bytes, uno por fila
+matriz_buffer:      .byte 8                  ; 8 filas de pantalla
+modo_presentacion:  .byte 1                  ; 0=mensaje, 1=figuras
+velocidad_scroll:   .byte 1                  ; retardo actual
+indice_figura_ram:  .byte 1                  ; índice 0..NUM_FIGURAS-1
+col_figura:         .byte 1                  ; columna 0..8 (8 + espacio)
 
-; Inicio
+
 .cseg
 inicio:
     ; Stack
@@ -66,64 +95,331 @@ inicio:
     ldi  temp, low(RAMEND)
     out  SPL, temp
 
-    ; Configurar pines - filas y columnas como salida
-    ldi  temp, 0xFC            ; PD7..PD2 salida (filas 0..5)
+    ; Pines (según tu mapeo)
+    ldi  temp, 0xFC                          ; PD7..PD2 salidas (filas 0..5)
     out  DDRD, temp
-    ldi  temp, 0x3F            ; PB5..PB0 salida (cols + filas 6/7)
+    ldi  temp, 0x3F                          ; PB5..PB0 salidas (cols + filas 6/7)
     out  DDRB, temp
-    ldi  temp, 0x3C            ; PC5..PC2 salida (cols 5..8)
+    ldi  temp, 0x3C                          ; PC5..PC2 salidas (cols 5..8)
     out  DDRC, temp
 
-    ; LED indicador PD0
+    ; LED PD0 (opcional)
     sbi  DDRD, 0
     cbi  PORTD, 0
 
-    ; Inicializar variables
+    ; Estado inicial
     ldi  indice_letra, 0
     ldi  col_letra, 0
-    ldi  contador_delay, DELAY_SCROLL
+    ldi  temp, MODO_MENSAJE
+    sts  modo_presentacion, temp
+    ldi  temp, DELAY_SCROLL
+    sts  velocidad_scroll, temp
+    mov  contador_delay, temp
+    ldi  temp, 0
+    sts  indice_figura_ram, temp
+    sts  col_figura, temp
 
-    ; Limpiar buffer inicial
-    rcall limpiar_buffer
+    rcall limpiar_buffer                     ; pantalla en negro
+    rcall uart_inicializar                   ; UART 9600 8N1
+    rcall imprimir_menu                      ; banner + ayuda + estado
 
-; Loop principal
-main:
-    ; Multiplexar la matriz actual varias veces
-    rcall multiplexar_matriz
-    
-    ; Decrementar contador de delay
+bucle_principal:
+    rcall multiplexar_matriz                 ; refresco rápido de la matriz
+
+    rcall uart_procesar                      ; atender comandos UART
+
+    ; Selección de modo para el paso de scroll
+    lds  temp, modo_presentacion
+    cpi  temp, MODO_MENSAJE
+    breq rama_mensaje
+
+rama_figuras:
+    ; FIGURAS: usa el MISMO scroll_izquierda
     dec  contador_delay
-    brne main                   ; si no llegó a 0, seguir mostrando
-    
-    ; Reiniciar contador y hacer scroll
-    ldi  contador_delay, DELAY_SCROLL
-    rcall scroll_izquierda
-    
-    rjmp main
+    brne bucle_principal
+    lds  temp, velocidad_scroll
+    mov  contador_delay, temp
+    rcall scroll_izquierda                   ; scroll único
+    rjmp bucle_principal
 
-; Limpiar buffer (todas las filas a 0)
-limpiar_buffer:
-    push XL
-    push XH
-    push temp
-    push temp2
-    
-    ldi  XL, low(matriz_buffer)
-    ldi  XH, high(matriz_buffer)
-    ldi  temp2, 8
-limpiar_loop:
+rama_mensaje:
+    ; MENSAJE
+    dec  contador_delay
+    brne bucle_principal
+    lds  temp, velocidad_scroll
+    mov  contador_delay, temp
+    rcall scroll_izquierda
+    rjmp bucle_principal
+
+;UART 9600
+uart_inicializar:
+    ldi  temp, high(UBRR0_VAL)               ; baudrate high
+    sts  UBRR0H, temp
+    ldi  temp, low(UBRR0_VAL)                ; baudrate low
+    sts  UBRR0L, temp
     ldi  temp, 0x00
-    st   X+, temp
-    dec  temp2
-    brne limpiar_loop
-    
-    pop  temp2
-    pop  temp
-    pop  XH
-    pop  XL
+    sts  UCSR0A, temp                        ; U2X0=0 (16x)
+    ldi  temp, (1<<RXEN0)|(1<<TXEN0)         ; habilitar RX/TX
+    sts  UCSR0B, temp
+    ldi  temp, (1<<UCSZ01)|(1<<UCSZ00)       ; 8N1
+    sts  UCSR0C, temp
     ret
 
-; Scroll a la izquierda - desplaza todo 1 bit y añade nueva columna
+; ---- Salida por UART (bloqueante simple) ----
+uart_putc:                                    ; envía r16
+    push temp2
+uart_wait_udre:
+    lds  temp2, UCSR0A
+    sbrs temp2, UDRE0
+    rjmp uart_wait_udre
+    sts  UDR0, r16
+    pop  temp2
+    ret
+
+uart_puts_P:                                   ; Z -> cadena FLASH terminada en 0
+    push ZL
+    push ZH
+    push r16
+uart_ps_loop:
+    lpm  r16, Z+
+    tst  r16
+    breq uart_ps_fin
+    rcall uart_putc
+    rjmp  uart_ps_loop
+uart_ps_fin:
+    pop  r16
+    pop  ZH
+    pop  ZL
+    ret
+
+uart_crlf:
+    push r16
+    ldi  r16, 13
+    rcall uart_putc
+    ldi  r16, 10
+    rcall uart_putc
+    pop  r16
+    ret
+
+uart_put_digit:                                ; imprime 0..9 (r16)
+    push r16
+    push temp
+    mov  temp, r16
+    ldi  r16, '0'
+    add  r16, temp
+    rcall uart_putc
+    pop  temp
+    pop  r16
+    ret
+
+uart_put_u8:                                   ; imprime r16 en decimal
+    push temp
+    push temp2
+    push temp3
+    mov  temp3, r16              ; temp3 = valor (0..255)
+
+    ; centenas (0..2) dado nuestro rango de vel
+    ldi  temp, 0
+cent_check_200:
+    cpi  temp3, 200
+    brlo cent_check_100
+    subi temp3, 200
+    ldi  temp, 2
+    rjmp print_cent
+cent_check_100:
+    cpi  temp3, 100
+    brlo print_cent
+    subi temp3, 100
+    ldi  temp, 1
+print_cent:
+    tst  temp
+    breq tens_part
+    mov  r16, temp
+    rcall uart_put_digit
+
+    ; decenas
+tens_part:
+    ldi  temp2, 0
+tens_loop:
+    cpi  temp3, 10
+    brlo tens_print
+    subi temp3, 10
+    inc  temp2
+    rjmp tens_loop
+tens_print:
+    tst  temp
+    brne tens_always
+    tst  temp2
+    breq units_part
+tens_always:
+    mov  r16, temp2
+    rcall uart_put_digit
+
+    ; unidades
+units_part:
+    mov  r16, temp3
+    rcall uart_put_digit
+
+    pop  temp3
+    pop  temp2
+    pop  temp
+    ret
+
+imprimir_status_vel:                            ; "  Retardo: nn" + CRLF
+    push ZL
+    push ZH
+    push r16
+    ldi  ZH, high(ms_vel<<1)
+    ldi  ZL, low(ms_vel<<1)
+    rcall uart_puts_P
+    lds  r16, velocidad_scroll
+    rcall uart_put_u8
+    rcall uart_crlf
+    pop  r16
+    pop  ZH
+    pop  ZL
+    ret
+
+imprimir_status_modo:                           ; Estado + modo + vel
+    push ZL
+    push ZH
+    push r16
+    ldi  ZH, high(ms_estado<<1)
+    ldi  ZL, low(ms_estado<<1)
+    rcall uart_puts_P
+    lds  r16, modo_presentacion
+    cpi  r16, 0
+    brne modo_fig_print
+    ldi  ZH, high(ms_modo_msg<<1)
+    ldi  ZL, low(ms_modo_msg<<1)
+    rcall uart_puts_P
+    rjmp modo_vel_print
+modo_fig_print:
+    ldi  ZH, high(ms_modo_fig<<1)
+    ldi  ZL, low(ms_modo_fig<<1)
+    rcall uart_puts_P
+modo_vel_print:
+    rcall imprimir_status_vel
+    pop  r16
+    pop  ZH
+    pop  ZL
+    ret
+
+imprimir_menu:                                  ; banner + ayuda + estado
+    push ZL
+    push ZH
+    ldi  ZH, high(ms_banner<<1)
+    ldi  ZL, low(ms_banner<<1)
+    rcall uart_puts_P
+    ldi  ZH, high(ms_ayuda1<<1)
+    ldi  ZL, low(ms_ayuda1<<1)
+    rcall uart_puts_P
+    rcall imprimir_status_modo
+    pop  ZH
+    pop  ZL
+    ret
+
+; ---- Parser: comandos +, -, M, F, ? ----
+uart_procesar:
+    push temp
+    push temp2
+    push temp3
+
+    lds  temp, UCSR0A
+    sbrs temp, RXC0
+    rjmp uart_fin
+
+    lds  temp, UDR0                           ; leer carácter
+
+    ; Ayuda
+    cpi  temp, '?'
+    breq uart_show_menu
+
+    ; Modo MENSAJE
+    cpi  temp, 'M'
+    breq poner_mensaje
+    cpi  temp, 'm'
+    breq poner_mensaje
+
+    ; Modo FIGURAS
+    cpi  temp, 'F'
+    breq poner_figuras
+    cpi  temp, 'f'
+    breq poner_figuras
+
+    ; MAS RAPIDO (menos retardo)
+    cpi  temp, '+'
+    breq mas_rapido
+
+    ; MAS LENTO (mas retardo)
+    cpi  temp, '-'
+    breq mas_lento
+
+    rjmp uart_fin
+
+uart_show_menu:
+    rcall imprimir_menu
+    rjmp uart_fin
+
+poner_mensaje:
+    ldi  temp2, MODO_MENSAJE
+    sts  modo_presentacion, temp2
+    rcall limpiar_buffer
+    lds  temp2, velocidad_scroll
+    mov  contador_delay, temp2
+    rcall imprimir_status_modo
+    rjmp uart_fin
+
+poner_figuras:
+    ldi  temp2, MODO_FIGURAS
+    sts  modo_presentacion, temp2
+    ldi  temp2, 0
+    sts  col_figura, temp2
+    rcall limpiar_buffer
+    lds  temp2, velocidad_scroll
+    mov  contador_delay, temp2
+    rcall imprimir_status_modo
+    rjmp uart_fin
+
+; saturación hacia mínimo
+mas_rapido:
+    lds  temp2, velocidad_scroll             ; temp2 = vel
+    cpi  temp2, VEL_MIN_SAT
+    brsh mr_sub
+    ldi  temp2, VEL_MIN
+    rjmp mr_store
+mr_sub:
+    ldi  temp3, VEL_PASO
+    sub  temp2, temp3                        ; vel -= paso
+mr_store:
+    sts  velocidad_scroll, temp2
+    mov  contador_delay, temp2               ; efecto inmediato
+    rcall imprimir_status_vel
+    rjmp uart_fin
+
+; saturación hacia máximo
+mas_lento:
+    lds  temp2, velocidad_scroll             ; temp2 = vel
+    cpi  temp2, VEL_MAX_SAT
+    brsh ml_setmax
+    ldi  temp3, VEL_PASO
+    add  temp2, temp3                        ; vel += paso
+    rjmp ml_store
+ml_setmax:
+    ldi  temp2, VEL_MAX
+ml_store:
+    sts  velocidad_scroll, temp2
+    mov  contador_delay, temp2               ; efecto inmediato
+    rcall imprimir_status_vel
+    rjmp uart_fin
+
+uart_fin:
+    pop  temp3
+    pop  temp2
+    pop  temp
+    ret
+
+;Scroll ÚNICO
 scroll_izquierda:
     push XL
     push XH
@@ -132,44 +428,59 @@ scroll_izquierda:
     push temp
     push temp2
     push temp3
-    
-    ; Obtener la siguiente columna a mostrar
-    rcall obtener_siguiente_columna  ; resultado en temp3
-    
-    ; Desplazar cada fila del buffer 1 bit a la izquierda
+
+    rcall obtener_siguiente_columna          ; columna nueva -> temp3
+
+    ; Desplazar 1 bit a la izquierda e insertar bit0..bit7 de temp3
     ldi  XL, low(matriz_buffer)
     ldi  XH, high(matriz_buffer)
-    ldi  temp2, 0               ; contador de fila
-    
+    ldi  temp2, 0
 scroll_fila:
-    ld   temp, X                ; cargar fila actual
-    lsl  temp                   ; desplazar a la izquierda
-    
-    ; Añadir el bit correspondiente de la nueva columna
-    sbrc temp3, 0               ; si bit0 de temp3 es 1
-    ori  temp, 0x01            ; poner bit0 del buffer
-    
-    st   X+, temp               ; guardar fila actualizada
-    lsr  temp3                  ; siguiente bit de la columna
-    
+    ld   temp, X                             ; fila actual
+    lsl  temp                                ; desplaza a la izq
+    sbrc temp3, 0
+    ori  temp, 0x01                          ; inserta bit LSB
+    st   X+, temp
+    lsr  temp3                               ; siguiente bit para próxima fila
     inc  temp2
     cpi  temp2, 8
     brne scroll_fila
+
     
-    ; Avanzar a la siguiente columna
+    ; Avances según modo
+    lds  temp, modo_presentacion
+    cpi  temp, MODO_MENSAJE
+    breq avance_letras
+
+    ;FIGURAS___________________________________________________________________________
+    lds  temp2, col_figura
+    inc  temp2
+    cpi  temp2, 9                             ; 0..7 + espacio (=8) ; si 9 -> reinicia
+    brlo guardar_col_fig
+    ldi  temp2, 0
+    lds  temp3, indice_figura_ram
+    inc  temp3
+    cpi  temp3, NUM_FIGURAS
+    brlo guardar_idx_fig
+    ldi  temp3, 0
+guardar_idx_fig:
+    sts  indice_figura_ram, temp3
+guardar_col_fig:
+    sts  col_figura, temp2
+    rjmp fin_avance_scroll
+
+    ;MENSAJE__________________________________________________________________________
+avance_letras:
     inc  col_letra
-    cpi  col_letra, 9           ; 8 columnas + 1 espacio
-    brlo no_nueva_letra
-    
-    ; Pasar a la siguiente letra
+    cpi  col_letra, 9                         ; 8 columnas + 1 espacio
+    brlo fin_avance_scroll
     ldi  col_letra, 0
     inc  indice_letra
     cpi  indice_letra, NUM_LETRAS
-    brlo no_reset
-    ldi  indice_letra, 0        ; volver al inicio del mensaje
-    
-no_reset:
-no_nueva_letra:
+    brlo fin_avance_scroll
+    ldi  indice_letra, 0
+
+fin_avance_scroll:
     pop  temp3
     pop  temp2
     pop  temp
@@ -179,102 +490,166 @@ no_nueva_letra:
     pop  XL
     ret
 
-; Obtener la siguiente columna para añadir al scroll
-; Resultado en temp3 (8 bits, uno por fila)
+;Selector de columna por modo
 obtener_siguiente_columna:
+    lds  temp, modo_presentacion             ; 0=mensaje, 1=figuras
+    cpi  temp, MODO_MENSAJE
+    breq obtener_columna_letra
+    rjmp obtener_columna_figura
+
+;Letras
+obtener_columna_letra:
     push ZL
     push ZH
     push temp
     push temp2
-    
-    ; Si col_letra == 8, devolver columna vacía (espacio entre letras)
+
     cpi  col_letra, 8
-    brne no_espacio
-    ldi  temp3, COL_VACIA
-    rjmp fin_obtener
-    
-no_espacio:
-    ; Obtener dirección de la letra actual
+    brne letra_no_espacio
+    ldi  temp3, COL_VACIA                    ; columna vacía entre letras
+    rjmp letra_fin
+
+letra_no_espacio:
     ldi  ZH, high(tabla_letras<<1)
     ldi  ZL, low(tabla_letras<<1)
     mov  temp, indice_letra
-    lsl  temp                   ; *2 porque son words
+    lsl  temp                                 ; *2 (puntero word)
     add  ZL, temp
     clr  temp
     adc  ZH, temp
-    
-    lpm  temp, Z+               ; low del puntero
-    lpm  temp2, Z               ; high del puntero
+
+    lpm  temp, Z+                             ; low puntero (word)
+    lpm  temp2, Z                             ; high puntero (word)
     mov  ZL, temp
     mov  ZH, temp2
-    lsl  ZL                     ; word->byte
+    lsl  ZL                                    ; word->byte
     rol  ZH
-    
-    ; Ahora Z apunta al inicio de los datos de la letra
-    ; Necesitamos extraer la columna col_letra (bit 7-col_letra de cada fila)
-    
-    ldi  temp3, 0              ; resultado acumulado
-    ldi  temp2, 8              ; contador de filas
-    
-extraer_columna:
-    lpm  temp, Z+              ; cargar byte de la fila
-    
-    ; Extraer el bit correspondiente a col_letra
-    ; col_letra=0 -> bit7, col_letra=1 -> bit6, etc.
+
+    ldi  temp3, 0
+    ldi  temp2, 8
+letra_extraer_col:
+    lpm  temp, Z+                             ; fila
     push temp2
     mov  temp2, col_letra
     cpi  temp2, 0
-    breq no_shift
-    
-shift_loop:
-    lsl  temp                  ; mover el bit deseado a bit7
+    breq letra_sin_shift
+letra_shift_loop:
+    lsl  temp                                  ; llevar bit deseado a bit7
     dec  temp2
-    brne shift_loop
-    
-no_shift:
-    ; El bit deseado está en bit7
-    lsr  temp3                 ; hacer espacio para el nuevo bit
-    sbrc temp, 7               ; si bit7 es 1
-    ori  temp3, 0x80          ; poner bit7 en el resultado
-    
+    brne letra_shift_loop
+letra_sin_shift:
+    lsr  temp3                                 ; corre acumulador
+    sbrc temp, 7
+    ori  temp3, 0x80                           ; agrega MSB
     pop  temp2
     dec  temp2
-    brne extraer_columna
-    
-fin_obtener:
+    brne letra_extraer_col
+
+letra_fin:
     pop  temp2
     pop  temp
     pop  ZH
     pop  ZL
     ret
 
-; Multiplexar la matriz completa una vez
+;Figuras: extracción equivalente 
+obtener_columna_figura:
+    push ZL
+    push ZH
+    push temp
+    push temp2
+
+    ; Espacio si col_figura == 8
+    lds  temp, col_figura
+    cpi  temp, 8
+    brne fig_no_espacio
+    ldi  temp3, 0x00
+    rjmp fig_fin
+
+fig_no_espacio:
+    ldi  ZH, high(tabla_figuras<<1)
+    ldi  ZL, low(tabla_figuras<<1)
+    lds  temp2, indice_figura_ram
+    lsl  temp2                                ; *2 (puntero word)
+    add  ZL, temp2
+    clr  temp
+    adc  ZH, temp
+
+    lpm  temp, Z+                             ; low puntero (word)
+    lpm  temp2, Z                             ; high puntero (word)
+    mov  ZL, temp
+    mov  ZH, temp2
+    lsl  ZL                                    ; word->byte
+    rol  ZH
+
+    ; Extraer columna (bit 7 - col_figura) de 8 filas
+    ldi  temp3, 0x00
+    lds  temp2, col_figura
+    ldi  temp, 8
+fig_extraer_col:
+    lpm  temp4, Z+                            ; fila
+    lds  temp2, col_figura
+    cpi  temp2, 0
+    breq fig_sin_shift
+fig_shift_loop:
+    lsl  temp4
+    dec  temp2
+    brne fig_shift_loop
+fig_sin_shift:
+    lsr  temp3
+    sbrc temp4, 7
+    ori  temp3, 0x80
+    dec  temp
+    brne fig_extraer_col
+
+fig_fin:
+    pop  temp2
+    pop  temp
+    pop  ZH
+    pop  ZL
+    ret
+
+;Utilidades de pantalla
+limpiar_buffer:
+    push XL
+    push XH
+    push temp
+    push temp2
+    ldi  XL, low(matriz_buffer)
+    ldi  XH, high(matriz_buffer)
+    ldi  temp2, 8
+limpiar_loop:
+    ldi  temp, 0x00
+    st   X+, temp
+    dec  temp2
+    brne limpiar_loop
+    pop  temp2
+    pop  temp
+    pop  XH
+    pop  XL
+    ret
+
+;Multiplexado
 multiplexar_matriz:
     push fila
     push XL
     push XH
-    
     ldi  fila, 0
 multiplex_loop:
-    ; Cargar columnas de la fila actual desde el buffer
     ldi  XL, low(matriz_buffer)
     ldi  XH, high(matriz_buffer)
     add  XL, fila
     clr  temp
     adc  XH, temp
     ld   columnas, X
-    
-    ; Mostrar la fila
     rcall cargar_columnas
     rcall seleccionar_fila
     rcall retardo_fila
     rcall apagar_filas
     rcall apagar_columnas
-    
     inc  fila
     cpi  fila, 8
     brne multiplex_loop
-    
     pop  XH
     pop  XL
     pop  fila
@@ -282,12 +657,11 @@ multiplex_loop:
 
 ; Columnas (col1..4 -> PB2..PB5 ; col5..8 -> PC5..PC2)
 cargar_columnas:
-    ; PB2..PB5 (col1..4 = bits7..4)
     in   temp, PORTB
-    andi temp, 0xC3
+    andi temp, 0xC3                           ; limpiar PB2..PB5
     clr  temp2
 
-    mov  temp3, columnas        ; bit7 -> PB2
+    mov  temp3, columnas                      ; bit7 -> PB2
     andi temp3, 0x80
     lsr  temp3
     lsr  temp3
@@ -296,19 +670,19 @@ cargar_columnas:
     lsr  temp3
     or   temp2, temp3
 
-    mov  temp3, columnas        ; bit6 -> PB3
+    mov  temp3, columnas                      ; bit6 -> PB3
     andi temp3, 0x40
     lsr  temp3
     lsr  temp3
     lsr  temp3
     or   temp2, temp3
 
-    mov  temp3, columnas        ; bit5 -> PB4
+    mov  temp3, columnas                      ; bit5 -> PB4
     andi temp3, 0x20
     lsr  temp3
     or   temp2, temp3
 
-    mov  temp3, columnas        ; bit4 -> PB5
+    mov  temp3, columnas                      ; bit4 -> PB5
     andi temp3, 0x10
     lsl  temp3
     or   temp2, temp3
@@ -318,7 +692,7 @@ cargar_columnas:
 
     ; PC2..PC5 (col5..8 = bits3..0)
     in   temp, PORTC
-    andi temp, 0xC3
+    andi temp, 0xC3                           ; limpiar PC2..PC5
     mov  temp2, columnas
     andi temp2, 0x0F
     lsl  temp2
@@ -363,7 +737,6 @@ bit_ok:
     out  PORTD, temp3
     ret
 
-; Apagar todas las filas
 apagar_filas:
     in   temp, PORTD
     ori  temp, 0xFC
@@ -373,7 +746,6 @@ apagar_filas:
     out  PORTB, temp
     ret
 
-; Apagar todas las columnas
 apagar_columnas:
     in   temp, PORTB
     andi temp, 0xC3
@@ -383,7 +755,7 @@ apagar_columnas:
     out  PORTC, temp
     ret
 
-; Retardo para el brillo de cada fila
+; Retardo de brillo por fila 
 retardo_fila:
     push temp
     ldi  temp, 0x80
