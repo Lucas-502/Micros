@@ -208,13 +208,21 @@ Hacer_circulo:
 
 ;Usando x^2 + y^2 = r  Hacer_circulo:  ret
 
-Hacer_Todas:   
+Hacer_Todas: 
+	rcall Hacer_Cruz
+	ldi  r24, low(3000)
+    ldi  r25, high(3000)
+    rcall Mover_izq 
+	rcall Hacer_trangulo 
+	ldi  r24, low(3000)
+    ldi  r25, high(3000)
+    rcall Mover_izq
 	ret
 
 ;_________
 Main:
 	;Elige una figura de forma manual
-	ldi r17, 01
+	ldi r17, 03
     ; Pre-posicionamiento
 
     ldi  r24, low(3000)
@@ -231,16 +239,16 @@ Main:
 
 	;Bucle de selección de figura
 	cpi  r17, FIG_TODAS
-	breq Hacer_Todas
+	jmp Hacer_Todas
 
 	cpi  r17, FIG_TRIANG
-	breq Hacer_trangulo
+	jmp Hacer_trangulo
 
 	cpi  r17, FIG_CRUZ
-	breq Hacer_Cruz
+	jmp Hacer_Cruz
 
 	cpi  r17, FIG_CIRC
-	breq Hacer_circulo
+	jmp Hacer_circulo
 
 	rjmp Main
 	
