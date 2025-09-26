@@ -44,3 +44,24 @@
 ; UART a 200000 bps @16 MHz (modo normal, U2X=0)
 .equ BAUD      = 9600
 .equ UBRR_VAL = (16000000/(16*BAUD))-1   ; = 103
+
+RESET:
+    clr r1                            ; r1 = 0 (se usa en ADC/índices)
+
+    ; Stack
+    ldi temp, HIGH(RAMEND)
+    out SPH, temp
+    ldi temp, LOW(RAMEND)
+    out SPL, temp
+
+    rcall CONFIG_PUERTOS
+    rcall USART_INIT
+
+    ldi estado, EN_ESPERA
+    ldi tipo_carga, CARGA_LIGERA
+    rcall DETENER_TODO
+
+    ; Mensaje inicial
+    ldi ZH, HIGH(MSG_INICIO*2)
+    ldi ZL, LOW(MSG_INICIO*2)
+    rcall ENVIAR_STRING
