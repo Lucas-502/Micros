@@ -1,0 +1,94 @@
+;Haciendo uso de esta página web para la tabla ascii https://www.ibm.com/docs/es/aix/7.1.0?topic=adapters-ascii-decimal-hexadecimal-octal-binary-conversion-table
+
+.include"m328pdef.inc"
+
+;_______pines digitales___________________________________________________________________
+.equ D0 = 0
+.equ D1 = 1
+.equ D2 = 2
+.equ D3 = 3
+.equ D4 = 4
+.equ D5 = 5
+.equ D6 = 6
+.equ D7 = 7
+.equ enviar = 0
+.equ RS = 1
+
+rjmp Inicio
+;_____________________________________________________________________
+Inicio:
+; Stack pointer
+    ldi  r16, high(RAMEND)     ; ldi: carga inmediata
+    out  SPH, r16              ; out: escribe en IO
+    ldi  r16, low(RAMEND)
+    out  SPL, r16
+
+; Configuramos como salida
+	ldi r16, 0b11111111       
+	out DDRD, r16
+  ldi r16, 0b0000011
+
+;	Timer0 CTC = 1 ms
+    ldi  r16, 0
+    out  TCCR0A, r16
+    ldi  r16, (1<<WGM01)          ; CTC por OCR0A
+    out  TCCR0A, r16
+    ldi  r16, 249                 ; 250 ticks ? 1 ms
+    out  OCR0A,  r16
+    ldi  r16, (1<<CS01)|(1<<CS00) ; prescaler 64
+    out  TCCR0B, r16
+    ldi  r16, (1<<OCF0A)          ; limpia flag
+    out  TIFR0,  r16
+
+	rjmp Main 
+
+timer:
+    ldi  r16, (1<<OCF0A)          ; borra flag ? inicia ventana de 1 ms
+    out  TIFR0, r16
+loop0:
+    in   r16, TIFR0
+    sbrs r16, OCF0A               ; espera compare
+    rjmp loop0
+    ret
+
+;Espera N ms (r24 = N) 
+Esperar:
+    sbiw r24, 0                 ; ¿N==0?
+    brne loop1          ; si N>0, entra al bucle
+    ret                         ; si N==0, retorna
+loop1:
+    rcall timer                 ; 1 ms
+    sbiw r24, 1                 ; N--
+    brne loop1          ; mientras N!=0
+    ret
+;____________________________Inicio de LCD________________________________________
+InicioLCD:
+;Paso 1 con RS = 0 D4 y D5 = 1
+
+Paso1:
+  ldi r17, 3  ;se repite 3 veces
+  cbi PORTD, 0b11111111  cbi PORTB, 0b000001  ; por las dudas todo cero
+  sbi PORTD, D5    sbi PORTD, D4  ;paso 1
+  ldi r24, low (40)
+  ldi r25, high(40)
+  rcall Esperar
+loop1:
+    rcall timer                 ; 1 ms
+    sbiw r17, 1                 ; N--
+    brne loop1          ; mientras N!=0
+    ret
+
+Paso2:
+
+Paso3: 
+Paso4:
+Paso5:
+Paso6:
+Paso7:
+Paso8:
+Paso9:
+
+
+
+
+
