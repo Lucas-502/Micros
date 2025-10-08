@@ -6,9 +6,18 @@
 #define ECHO  PD3
 #define LED   PD6
 
-//____________________________UART__________________________________
+static void uartInicio(void){
+  UBRR0H = 0;
+  UBRR0L = 103;
+  UCSR0A = 0;
+  UCSR0B = (1<<TXEN0);
+  UCSR0C = (1<<UCSZ01)|(1<<UCSZ00);
+}
 
-
+static void uartChar(char c){
+  while(!(UCSR0A & (1<<UDRE0)));
+  UDR0 = c;
+}
 
 
 //____________________Medición de distancia_________________________
