@@ -30,3 +30,40 @@ static void lcd_escribir_byte(uint8_t rs, uint8_t b){  /* rs: 0=cmd, 1=dato */
 	lcd_escribir_nibble(b & 0x0F);
 	if(rs) _delay_us(50); else _delay_ms(2);
 }
+
+static inline void lcd_comando(uint8_t c){ lcd_escribir_byte(0, c); }
+static inline void lcd_dato(uint8_t d){ lcd_escribir_byte(1, d); }
+
+static void lcd_inicializar(void){
+	PONER_BIT(DDRB, DDB0); PONER_BIT(DDRB, DDB1);
+	PONER_BIT(DDRD, DDD4); PONER_BIT(DDRD, DDD5); PONER_BIT(DDRD, DDD6); PONER_BIT(DDRD, DDD7);
+	BORRAR_BIT(PORTB, PB0); BORRAR_BIT(PORTB, PB1);
+	PORTD &= 0x0F;
+
+	_delay_ms(50);
+	lcd_escribir_nibble(0x3); _delay_ms(5);
+	lcd_escribir_nibble(0x3); _delay_ms(5);
+	lcd_escribir_nibble(0x3); _delay_ms(5);
+	lcd_escribir_nibble(0x2); _delay_ms(5);
+
+	lcd_comando(0x28);
+	lcd_comando(0x0C);
+	lcd_comando(0x06);
+	lcd_comando(0x01);
+	_delay_ms(2);
+}
+
+static void lcd_ir(uint8_t fila, uint8_t col){         /* fila:0..1, col:0..15 */
+	uint8_t dir = (fila ? 0x40 : 0x00) + col;
+	lcd_comando(0x80 | dir);
+}
+
+static void lcd_texto(const char* s){
+	while(*s) lcd_dato((uint8_t)*s++);
+}
+
+/* ---------- Teclado 4x4 ---------- */
+static inline void filas_alta_impedancia(void){
+	DDRC  &= ~(0x0F);
+	PORTC &= ~(0x0F);
+}
