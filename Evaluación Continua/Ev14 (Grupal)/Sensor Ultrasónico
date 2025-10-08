@@ -19,6 +19,11 @@ static void uartChar(char c){
   UDR0 = c;
 }
 
+static void uartTxt(const char* s){
+  while(*s) uartChar(*s++);
+}
+
+
 
 //____________________Medición de distancia_________________________
 
