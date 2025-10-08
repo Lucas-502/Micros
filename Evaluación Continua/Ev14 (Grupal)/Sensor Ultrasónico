@@ -1,1 +1,61 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
 
+#define TRIG  PD2
+#define ECHO  PD3
+#define LED   PD6
+
+//____________________________UART__________________________________
+
+
+
+
+//____________________Medición de distancia_________________________
+
+
+
+
+//________________________PWM para LED______________________________
+
+
+
+
+//____________________________MAIN__________________________________
+
+int main(void){
+  DDRD |= (1<<TRIG) | (1<<LED);
+  DDRD &= ~(1<<ECHO);
+  PORTD = 0;
+
+  uartInicio();
+  pwmInicio();
+
+  while(1){
+    uint16_t d  = medir();
+    uint16_t dm = (d<2)? 0 : d;
+
+    uint8_t n = 0;
+    if(d >= 50){       //50cm distancia máxima a la que el led va a responder
+      n = 10;          //10 niveles de brillo (máximo)
+    }else if(d >= 5){  //paso de 5 en 5
+      n = d/5;         // nivel actual según distancia dentro de los 50cm
+    }
+
+    brillo(n); //brillo según nivel
+
+/*Mensajes por UART con tiempo entre mensaje y mensaje*/
+    uartTxt("Dist: ");   
+    uartNum(dm);
+    uartTxt(" cm  Nivel: ");
+    uartNum(n);
+    uartTxt("\r\n");
+
+    _delay_ms(200);
+  }
+
+
+
+
+
+}
