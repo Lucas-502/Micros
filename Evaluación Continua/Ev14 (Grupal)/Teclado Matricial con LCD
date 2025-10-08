@@ -14,3 +14,12 @@ static void lcd_pulso(void){
 	_delay_us(40);
 	BORRAR_BIT(PORTB, PB1);
 	_delay_us(40);
+}
+
+static void lcd_escribir_nibble(uint8_t n){            /* n en [3..0] */
+	n = (n & 0x0F) << 4;                               /* PD7..PD4 */
+	uint8_t p = PORTD;
+	p = (p & 0x0F) | n;
+	PORTD = p;
+	lcd_pulso();
+}
