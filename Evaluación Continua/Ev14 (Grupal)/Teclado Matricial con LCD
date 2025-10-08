@@ -76,3 +76,58 @@ static inline void fila_activa(uint8_t f){             /* 0..3, salida=0 */
 		case 3: PONER_BIT(DDRC, DDC3); BORRAR_BIT(PORTC, PC3); break;
 	}
 }
+static inline uint8_t leer_columnas(void){
+	uint8_t c = 0;
+	if(!(PINB & (1<<PB2))) c |= (1<<0);
+	if(!(PINB & (1<<PB3))) c |= (1<<1);
+	if(!(PINB & (1<<PB4))) c |= (1<<2);
+	if(!(PINB & (1<<PB5))) c |= (1<<3);
+	return c;
+}
+
+static char teclado_leer(void){
+	static const char mapa[16] = {
+		'1','2','3','A',
+		'4','5','6','B',
+		'7','8','9','C',
+		'*','0','#','D'
+	};
+	filas_alta_impedancia();
+	for(uint8_t fila=0; fila<4; ++fila){
+		fila_activa(fila);
+		_delay_ms(3);
+		uint8_t cols = leer_columnas();
+		if(cols){
+			uint8_t col = (cols & 1) ? 0 : (cols & 2) ? 1 : (cols & 4) ? 2 : 3;
+			uint8_t i = (fila<<2) + col;
+			return mapa[i];
+		}
+		filas_alta_impedancia();
+	}
+	return 0;
+}
+
+
+/* ---------- Principal ---------- */
+int main(void){
+	DDRB &= ~((1<<DDB2)|(1<<DDB3)|(1<<DDB4)|(1<<DDB5));
+	PORTB |=  (1<<PB2)|(1<<PB3)|(1<<PB4)|(1<<PB5);
+
+	lcd_inicializar();
+	lcd_ir(0,0);
+	lcd_texto("TECLA: ");
+
+	for(;;){
+		char t = teclado_leer();
+		if(t){
+			lcd_ir(0,7);
+			lcd_dato((uint8_t)t);
+			_delay_ms(40);
+			while(leer_columnas()!=0) { }
+			filas_alta_impedancia();
+		}
+	}
+}
+
+
+
