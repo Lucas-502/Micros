@@ -37,7 +37,18 @@ static void uartNum(uint16_t n){
 
 
 
-//________________________PWM para LED______________________________
+static void pwmInicio(void){
+  DDRD  |= (1<<LED);
+  TCCR0A = (1<<COM0A1)|(1<<WGM01)|(1<<WGM00);
+  TCCR0B = (1<<CS01)|(1<<CS00);
+  OCR0A  = 0;
+}
+
+static void brillo(uint8_t n){
+  if(n>10) n=10;
+  OCR0A = (uint8_t)((uint16_t)n*255/10);
+}
+
 
 
 
