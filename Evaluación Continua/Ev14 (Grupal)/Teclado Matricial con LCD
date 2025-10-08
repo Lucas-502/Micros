@@ -1,1 +1,16 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
 
+/* Pines: LCD RS=PB0, E=PB1, D4..D7=PD4..PD7; Teclado L1..L4=PC0..PC3, C1..C4=PB2..PB5 */
+
+#define PONER_BIT(p,b)   ((p) |=  (1U<<(b)))
+#define BORRAR_BIT(p,b)  ((p) &= ~(1U<<(b)))
+
+/* - LCD --- */
+static void lcd_pulso(void){
+	PONER_BIT(PORTB, PB1);
+	_delay_us(40);
+	BORRAR_BIT(PORTB, PB1);
+	_delay_us(40);
