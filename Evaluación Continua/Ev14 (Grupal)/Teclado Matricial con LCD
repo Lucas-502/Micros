@@ -23,3 +23,10 @@ static void lcd_escribir_nibble(uint8_t n){            /* n en [3..0] */
 	PORTD = p;
 	lcd_pulso();
 }
+
+static void lcd_escribir_byte(uint8_t rs, uint8_t b){  /* rs: 0=cmd, 1=dato */
+	if(rs) PONER_BIT(PORTB, PB0); else BORRAR_BIT(PORTB, PB0);
+	lcd_escribir_nibble(b >> 4);
+	lcd_escribir_nibble(b & 0x0F);
+	if(rs) _delay_us(50); else _delay_ms(2);
+}
