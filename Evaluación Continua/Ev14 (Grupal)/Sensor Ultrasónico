@@ -23,6 +23,13 @@ static void uartTxt(const char* s){
   while(*s) uartChar(*s++);
 }
 
+static void uartNum(uint16_t n){
+  if(n==0){ uartChar('0'); return; }
+  char buf[8]; uint8_t i=0;
+  while(n){ buf[i++] = '0' + (n%10); n/=10; }
+  while(i--) uartChar(buf[i]);
+}
+
 
 
 //____________________Medición de distancia_________________________
