@@ -67,3 +67,12 @@ static inline void filas_alta_impedancia(void){
 	DDRC  &= ~(0x0F);
 	PORTC &= ~(0x0F);
 }
+
+static inline void fila_activa(uint8_t f){             /* 0..3, salida=0 */
+	switch(f){
+		case 0: PONER_BIT(DDRC, DDC0); BORRAR_BIT(PORTC, PC0); break;
+		case 1: PONER_BIT(DDRC, DDC1); BORRAR_BIT(PORTC, PC1); break;
+		case 2: PONER_BIT(DDRC, DDC2); BORRAR_BIT(PORTC, PC2); break;
+		case 3: PONER_BIT(DDRC, DDC3); BORRAR_BIT(PORTC, PC3); break;
+	}
+}
