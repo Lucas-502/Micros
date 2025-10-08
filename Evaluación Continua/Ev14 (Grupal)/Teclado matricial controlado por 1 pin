@@ -95,3 +95,25 @@ static char decode(uint16_t x, uint8_t *ro, uint8_t *co, uint16_t *eo){
   if(ro) *ro=rr; if(co) *co=cl; if(eo) *eo=e;
   return key[rr][cl];
 }
+int main(void){
+  adc_init(); lcd_init();
+  lcd_xy(0,0); lcd_put("TECLA: ");
+  lcd_xy(0,1); lcd_put("R: C: ADC:");
+
+  uint16_t idle = adc_avg();
+
+  for(;;){
+    uint16_t v = press_get(idle);
+    uint8_t r=0,c=0; uint16_t err=0xFFFF;
+    char ch = decode(v,&r,&c,&err);
+
+    if(err<=ERR_OK){
+      lcd_xy(7,0);  lcd_dat((uint8_t)ch);
+      lcd_xy(2,1);  lcd_dat('0'+r);
+      lcd_xy(5,1);  lcd_dat('0'+c);
+      lcd_xy(10,1); lcd_num4(v); lcd_dat(' ');
+    }
+    wait_rel(idle);
+  }
+  return 0;
+}
