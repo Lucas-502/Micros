@@ -1,1 +1,64 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+/* ===== Config ===== */
+#define ADC_CH      0
+#define ADC_N       12
+#define DBMS        35
+#define HOLD        10
+#define IDLE_D      3
+#define ERR_OK      40
+
+/* ===== LCD (RS=D8, EN=D9, D4..D7=PD4..PD7) ===== */
+#define RS_PORT PORTB
+#define RS_DDR  DDRB
+#define RS_PIN  PB0
+#define EN_PORT PORTB
+#define EN_DDR  DDRB
+#define EN_PIN  PB1
+#define D_PORT  PORTD
+#define D_DDR   DDRD
+
+/* Etiquetas de teclas (A..D, col 1..4) */
+static const char key[4][4] = {
+  {'7','8','9','/'},
+  {'4','5','6','x'},
+  {'1','2','3','-'},
+  {'C','0','=','+'}
+};
+
+/* ---------- LCD ---------- */
+static void en_pulse(void){ EN_PORT|=(1<<EN_PIN); _delay_us(1); EN_PORT&=~(1<<EN_PIN); _delay_us(50); }
+static void put4(uint8_t hi){ D_PORT=(D_PORT&0x0F)|hi; en_pulse(); }
+static void lcd_cmd(uint8_t c){ RS_PORT&=~(1<<RS_PIN); put4(c&0xF0); put4((c<<4)&0xF0); if(c==0x01||c==0x02)_delay_ms(2); }
+static void lcd_dat(uint8_t d){ RS_PORT|=(1<<RS_PIN);  put4(d&0xF0); put4((d<<4)&0xF0); }
+static void lcd_xy(uint8_t x,uint8_t y){ static const uint8_t b[2]={0x00,0x40}; lcd_cmd(0x80|(b[y&1]+(x&0x0F))); }
+static void lcd_put(const char*s){ while(*s) lcd_dat(*s++); }
+static void lcd_num4(uint16_t v){ char b[5]; b[4]='\0'; for(int8_t i=3;i>=0;i--){ b[i]='0'+(v%10); v/=10; } lcd_put(b); }
+static void lcd_init(void){
+  RS_DDR|=(1<<RS_PIN); EN_DDR|=(1<<EN_PIN); D_DDR|=(1<<PD4)|(1<<PD5)|(1<<PD6)|(1<<PD7);
+  RS_PORT&=~(1<<RS_PIN); EN_PORT&=~(1<<EN_PIN); _delay_ms(50);
+  lcd_cmd(0x33); lcd_cmd(0x32); lcd_cmd(0x28); lcd_cmd(0x0C); lcd_cmd(0x06); lcd_cmd(0x01); _delay_ms(2);
+}
+
+/* ---------- ADC ---------- */
+static void adc_init(void){ ADMUX=(1<<REFS0)|ADC_CH; ADCSRA=(1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0); }
+static uint16_t adc_one(void){ ADCSRA|=(1<<ADSC); while(ADCSRA&(1<<ADSC)); return ADC; }
+static uint16_t adc_avg(void){ uint32_t s=0; for(uint8_t i=0;i<ADC_N;i++) s+=adc_one(); return (uint16_t)(s/ADC_N); }
+static uint16_t press_get(uint16_t idle){
+  uint16_t th = idle + IDLE_D, v=0;
+  do{ v=adc_avg(); _delay_ms(HOLD); }while(v<=th);
+  _delay_ms(DBMS); return adc_avg();
+}
+static void wait_rel(uint16_t idle){
+  uint16_t th = idle + IDLE_D, v;
+  do{ v=adc_avg(); _delay_ms(HOLD); }while(v>th);
+}
+
 
