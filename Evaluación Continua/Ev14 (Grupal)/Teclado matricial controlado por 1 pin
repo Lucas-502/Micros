@@ -61,4 +61,17 @@ static void wait_rel(uint16_t idle){
   do{ v=adc_avg(); _delay_ms(HOLD); }while(v>th);
 }
 
+/* ===== Modelo 1-pin ===== */
+static const uint32_t rf[4] = {1000, 3300, 10000, 33000};  // filas
+#define RPULL 10000U
+// columnas: normal y con col 2<->3 intercambiadas
+static const uint32_t rcA[4] = {2200, 6800, 22000, 68000};
+static const uint32_t rcB[4] = {2200, 22000, 6800, 68000};
 
+/* Tablas (cuentas ADC 0..1023) */
+static void tbl_build(const uint32_t rc[4], uint16_t t[4][4]){
+  for(uint8_t r=0;r<4;r++) for(uint8_t c=0;c<4;c++){
+    uint32_t S = RPULL + rf[r] + rc[c];
+    t[r][c] = (uint16_t)((1023UL*RPULL + S/2)/S);
+  }
+}
