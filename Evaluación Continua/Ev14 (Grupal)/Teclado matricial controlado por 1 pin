@@ -75,3 +75,23 @@ static void tbl_build(const uint32_t rc[4], uint16_t t[4][4]){
     t[r][c] = (uint16_t)((1023UL*RPULL + S/2)/S);
   }
 }
+
+/* Decode usando ambos modelos; devuelve fila/col lógicas y carácter */
+static char decode(uint16_t x, uint8_t *ro, uint8_t *co, uint16_t *eo){
+  uint16_t TA[4][4], TB[4][4]; tbl_build(rcA,TA); tbl_build(rcB,TB);
+  uint16_t e=0xFFFF; uint8_t rr=0, cc=0, m=0;
+
+  for(uint8_t r=0;r<4;r++) for(uint8_t c=0;c<4;c++){ // A
+    uint16_t ref=TA[r][c], d=(x>ref)?(x-ref):(ref-x);
+    if(d<e){ e=d; rr=r; cc=c; m=0; }
+  }
+  for(uint8_t r=0;r<4;r++) for(uint8_t c=0;c<4;c++){ // B (2<->3)
+    uint16_t ref=TB[r][c], d=(x>ref)?(x-ref):(ref-x);
+    if(d<e){ e=d; rr=r; cc=c; m=1; }
+  }
+
+  // Columna lógica: si ganó B, intercambia 2 y 3
+  uint8_t cl = (m==1 ? (cc==1?2:(cc==2?1:cc)) : cc);
+  if(ro) *ro=rr; if(co) *co=cl; if(eo) *eo=e;
+  return key[rr][cl];
+}
