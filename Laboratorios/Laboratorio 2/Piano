@@ -1,1 +1,17 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+
+/* PWM en OC1A  prescaler 8 */
+static inline void tono_start_ocr(uint16_t ocr){
+    DDRB  |= (1<<PB1);
+    TCCR1A = (1<<COM1A0);
+    TCCR1B = (1<<WGM12)|(1<<CS11);
+    OCR1A  = ocr;
+}
+static inline void tono_stop(void){
+    TCCR1A = 0; TCCR1B = 0;
+    PORTB &= ~(1<<PB1);
+}
 
