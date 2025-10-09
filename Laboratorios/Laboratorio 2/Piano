@@ -15,3 +15,4 @@ static inline void tono_stop(void){
     PORTB &= ~(1<<PB1);
 }
 
+/* Tabla de notas  LUT de OCR1A*/
