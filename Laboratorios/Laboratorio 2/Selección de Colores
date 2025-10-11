@@ -1,1 +1,69 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+#include <xc.h>
 
+//Puertos_________________________
+
+const uint8_t F4      = (1 << PD2);//Fila4
+const uint8_t F3      = (1 << PD3);
+const uint8_t F2      = (1 << PD4);
+const uint8_t F1      = (1 << PD5);//Fila1
+const uint8_t C1      = (1 << PD6);//columna1
+const uint8_t C2      = (1 << PD7);
+const uint8_t C3      = (1 << PB0);
+const uint8_t C4      = (1 << PB1);//Columna4
+
+const uint8_t Buzzer  = (1 << PB2);
+const uint8_t Red     = (1 << PB3);//Indicador de Incorrecto
+const uint8_t Green   = (1 << PB4);//Indicador de Correcto
+
+const uint8_t sda     = (1 << PC4);//I2C  
+const uint8_t scl     = (1 << PC5);
+
+//Teclado 4x4
+static void Teclado(void){
+	DDRD |= F4|F3|F2|F1|C1|C2|C3|C4;
+	PORTD &= ~(F4|F3|F2|F1|C1|C2|C3|C4);
+		
+	
+	//Multiplexeo	
+	for (uint8_t i = 0; i < 4; i++){
+		for (uint8_t j = 0; j < 4; i++){
+			
+		}
+	}
+}
+
+
+
+//LCD I2C
+
+static void LCD(void){
+
+
+
+}
+
+//Indicadores (leds y buzzer)
+static void Indicadores(void){
+
+
+}
+
+
+int main(void){
+	Teclado();
+	LCD();
+	Indicadores();
+	
+    while(1){
+		
+		
+		
+		 
+    }
+}
