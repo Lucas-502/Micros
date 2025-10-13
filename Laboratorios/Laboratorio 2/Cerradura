@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include <xc.h>
 
+#include <util/twi.h>
+#include "twi_lcd.h"
+
 //Puertos_________________________
 
 const uint8_t F4      = (1 << PD2);//Fila4
@@ -28,7 +31,12 @@ const uint8_t scl     = (1 << PC5);
 static void Teclado(void){
 	DDRD |= F4|F3|F2|F1|C1|C2|C3|C4;
 	PORTD &= ~(F4|F3|F2|F1|C1|C2|C3|C4);
-		
+
+	tecla = [cols][fils]	//array de 0 a 16 (cero ninguna tecla presionada y el resto cualquiera de las 16 teclas de la matriz)
+	[1,2,3,4];
+	[5,6,7,8];
+	[9,10,11,12];
+	[13,14,15,16];
 	
 	//Multiplexeo	
 	for (uint8_t i = 0; i < 4; i++){
@@ -43,7 +51,12 @@ static void Teclado(void){
 //LCD I2C
 
 static void LCD(void){
-
+	twi_lcd_cmd(0x80);
+	twi_lcd_msg("Que Labure ");
+	//--- Select 2nd Row
+	twi_lcd_cmd(0xC0);
+	//--- Send a String to LCD
+	twi_lcd_msg("Gololo");
 
 
 }
@@ -56,6 +69,17 @@ static void Indicadores(void){
 
 
 int main(void){
+	twi_init();
+	twi_lcd_init();
+	twi_lcd_cmd(0x80);
+	twi_lcd_cmd(0xC0);
+	
+	twi_lcd_clear();
+	LCD(modo);
+	
+	_delay_ms(2000);  //Para ver si limpiaba la pantalla
+	twi_lcd_cmd(0x01);
+
 	Teclado();
 	LCD();
 	Indicadores();
