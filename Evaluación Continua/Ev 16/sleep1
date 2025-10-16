@@ -21,3 +21,25 @@ static void wdt_1s_enable_irq(void){
     WDTCSR = (1<<WDIE) | (1<<WDP2) | (1<<WDP1); // 1 s (NO WDP0)
     sei();
 }
+ISR(WDT_vect){ if (wdt_ticks < 255) wdt_ticks++; }
+
+static void sleep_30s_idle(void){
+    wdt_ticks = 0;
+    set_sleep_mode(SLEEP_MODE_IDLE); // <-- IDLE
+    while (wdt_ticks < WDT_TICKS_FOR_30S){
+        sleep_enable();
+        sei();
+        sleep_cpu();
+        sleep_disable();
+    }
+}
+
+int main(void){
+    leds_init();
+    wdt_1s_enable_irq();
+    sei();
+    for(;;){
+        leds_on(); _delay_ms(ACTIVE_ON_MS); leds_off();
+        sleep_30s_idle();
+    }
+}
