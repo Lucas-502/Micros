@@ -24,3 +24,19 @@ static void wdt_1s_enable_irq(void){
     WDTCSR = (1<<WDIE) | (1<<WDP2) | (1<<WDP1); // 1 s
     sei();
 }
+
+ISR(WDT_vect){ if (wdt_ticks < 255) wdt_ticks++; }
+
+static void sleep_30s_adc_nr(void){
+    wdt_ticks = 0;
+    ADCSRA |= (1<<ADEN);              // ADC encendido (propio del modo)
+    set_sleep_mode(SLEEP_MODE_ADC);   // <-- ADC Noise Reduction
+    while (wdt_ticks < WDT_TICKS_FOR_30S){
+        sleep_enable();
+        sei();
+        sleep_cpu();                   // despierta por WDT
+        sleep_disable();
+    }
+    // opcional: dejar ADC encendido o apagarlo al salir:
+    // ADCSRA &= ~(1<<ADEN);
+}
