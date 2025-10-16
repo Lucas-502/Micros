@@ -1,0 +1,49 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <avr/sleep.h>
+#include <util/delay.h>
+#include <stdint.h>
+
+#define ACTIVE_ON_MS 1000
+#define WDT_TICKS_FOR_30S 30
+
+static inline void leds_init(void){
+    DDRB |= (1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)|(1<<PB4);
+}
+static inline void leds_on(void){  PORTB |=  (1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)|(1<<PB4); }
+static inline void leds_off(void){ PORTB &= ~((1<<PB0)|(1<<PB1)|(1<<PB2)|(1<<PB3)|(1<<PB4)); }
+
+static volatile uint8_t wdt_ticks = 0;
+static void wdt_1s_enable_irq(void){
+    cli();
+    MCUSR &= ~(1<<WDRF);
+    WDTCSR = (1<<WDCE) | (1<<WDE);
+    WDTCSR = (1<<WDIE) | (1<<WDP2) | (1<<WDP1); // 1 s
+    sei();
+}
+ISR(WDT_vect){ if (wdt_ticks < 255) wdt_ticks++; }
+
+static void sleep_30s_powerdown(void){
+    wdt_ticks = 0;
+    ADCSRA &= ~(1<<ADEN);                       // ADC OFF para mínimo consumo
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);        // <-- POWER-DOWN
+    while (wdt_ticks < WDT_TICKS_FOR_30S){
+        sleep_enable();
+        sei();
+        sleep_cpu();                            // despierta por WDT
+        sleep_disable();
+    }
+}
+
+int main(void){
+    leds_init();
+    wdt_1s_enable_irq();
+    sei();
+    while(1){
+        leds_on(); _delay_ms(ACTIVE_ON_MS); leds_off();
+        sleep_30s_powerdown();
+    }
+}
