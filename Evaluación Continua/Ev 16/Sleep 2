@@ -40,3 +40,13 @@ static void sleep_30s_adc_nr(void){
     // opcional: dejar ADC encendido o apagarlo al salir:
     // ADCSRA &= ~(1<<ADEN);
 }
+
+int main(void){
+    leds_init();
+    wdt_1s_enable_irq();
+    sei();
+    for(;;){
+        leds_on(); _delay_ms(ACTIVE_ON_MS); leds_off();
+        sleep_30s_adc_nr();
+    }
+}
