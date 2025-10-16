@@ -34,12 +34,3 @@ static void sleep_30s_idle(void){
     }
 }
 
-int main(void){
-    leds_init();
-    wdt_1s_enable_irq();
-    sei();
-    for(;;){
-        leds_on(); _delay_ms(ACTIVE_ON_MS); leds_off();
-        sleep_30s_idle();
-    }
-}
