@@ -241,3 +241,35 @@ static EST est_verif(void){
         }
     }
 }
+
+static EST est_menu(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Menu de clave");
+    twi_lcd_cmd(0xC0); twi_lcd_msg("A:OK   R:Cerrar");
+ 
+    while(1){
+        char t = Teclado();
+        if(!t) continue;
+        if(t==T_CER) return E_CIERRE;  
+        if(t==T_OK)  return E_CAMB1;
+        if(t==T_MEN || t==T_CAN) return E_BIENV;
+    }
+}
+ 
+static EST est_camb1(void){
+    bool ok = pedir_clave("Clave actual:  ");
+    if(want_cerrar){ want_cerrar=0; return E_CIERRE; }
+    if(want_menu){   want_menu=0;   return E_MENU;  }
+    if(!ok) return E_BIENV;
+ 
+    uint8_t lg = eer(0x00);
+    bool eq = (n_ing==lg);
+    for(uint8_t i=0;i<lg && eq;i++){
+        if(ing[i] != eer(0x01+i)) eq=false;
+    }
+    if(!eq){
+        pant_err(); _delay_ms(900);
+        return E_BIENV;
+    }
+    return E_CAMB2;
+}
