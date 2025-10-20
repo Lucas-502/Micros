@@ -225,3 +225,46 @@ static void step_player(void){
     }
 }
 
+static void mostrar_menu(void){                                                             //menu uart
+    uart_puts("  PIANO ELECTRONICO \r\n");
+    uart_puts("\nCOMANDOS:\r\n");
+    uart_puts("  C1 o 1 : Cancion 1\r\n");
+    uart_puts("  C2 o 2 : Cancion 2 \r\n");
+    uart_puts("  S      : Detener\r\n");
+    uart_puts("  T      : Teclado manual\r\n");
+    uart_puts("  M      : Mostrar menu\r\n");
+}
+static inline void str_to_upper(char* s){
+    for(; *s; ++s){ if(*s>='a' && *s<='z') *s -= 32; }
+}
+static inline void rstrip_ws(char* s){
+    uint8_t i=0; while(s[i]) i++;
+    while(i>0 && (s[i-1]==' '||s[i-1]=='\t')) { s[i-1]='\0'; i--; }
+}
+static void procesar_comando_linea(char* cmd){
+    rstrip_ws(cmd);
+    str_to_upper(cmd);
+
+    if((cmd[0]=='C' && cmd[1]=='1' && cmd[2]=='\0') || (cmd[0]=='1' && cmd[1]=='\0')){
+        uart_puts("[C1]\r\n"); start_song(1); return;
+    }
+    if((cmd[0]=='C' && cmd[1]=='2' && cmd[2]=='\0') || (cmd[0]=='2' && cmd[1]=='\0')){
+        uart_puts("[C2]\r\n"); start_song(2); return;
+    }
+    if(cmd[0]=='S' && cmd[1]=='\0'){ uart_puts("[S]\r\n"); stop_song(); modo_teclado=1; return; }
+    if(cmd[0]=='T' && cmd[1]=='\0'){ uart_puts("[T]\r\n"); stop_song(); modo_teclado=1; uart_puts(">>> Modo teclado manual activado\r\n"); return; }
+    if(cmd[0]=='M' && cmd[1]=='\0'){ uart_puts("[M]\r\n"); mostrar_menu(); return; }
+
+    uart_puts(">>> Comando no reconocido. Opciones: 1,C1, 2,C2, S, T, M\r\n");
+}
+
+static uint8_t procesar_atajo(char c){
+    if(c>='a' && c<='z') c -= 32;
+    if(c=='1'){ uart_puts("\r\n[C1]\r\n"); start_song(1); return 1; }
+    if(c=='2'){ uart_puts("\r\n[C2]\r\n"); start_song(2); return 1; }
+    if(c=='S'){ uart_puts("\r\n[S]\r\n"); stop_song(); modo_teclado=1; return 1; }
+    if(c=='T'){ uart_puts("\r\n[T]\r\n"); stop_song(); modo_teclado=1; uart_puts(">>> Modo teclado manual activado\r\n"); return 1; }
+    if(c=='M'){ uart_puts("\r\n[M]\r\n"); mostrar_menu(); return 1; }
+    return 0;
+}
+
