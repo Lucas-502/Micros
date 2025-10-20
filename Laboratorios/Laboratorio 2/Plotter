@@ -222,3 +222,26 @@ void Triangulo(void){
 	_delay_ms(300);
 	subir_lapiz();
 }
+
+//  Círculo 
+void Circulo(void){
+    const uint16_t LADOS       = 72;
+    const uint16_t MS_POR_LADO = 150;
+    const float    ANG_INI     = 225.0f;
+ 
+    const float paso   = 360.0f / (float)LADOS;
+    const float ang0   = ANG_INI + (paso * 0.5f);
+ 
+	izquierda(3000);
+	abajo(3000);
+    bajar_lapiz();
+    Timer(500);
+ 
+    for (uint16_t i = 0; i < LADOS+1; ++i){
+        float ang = ang0 + (float)i * paso;
+        Linea_con_angulo(MS_POR_LADO, ang);
+    }
+    Timer(500);
+    subir_lapiz();
+}
+
