@@ -137,3 +137,34 @@ static void debug_distances_ui(const uint16_t raw0[3]);
 
 // Perfil + main
 static void load_defaults(void);
+
+// UART
+static void uart_init(void){
+    UCSR0A = (1<<U2X0);
+    uint16_t ubrr = (F_CPU/8/9600UL) - 1;
+    UBRR0H = ubrr >> 8; UBRR0L = ubrr & 0xFF;
+    UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+    UCSR0C = (1<<UCSZ01)|(1<<UCSZ00);
+}
+static inline uint8_t uart_available(void){ return (UCSR0A & (1<<RXC0)); }
+static inline uint8_t uart_getc_nonblock(char *c){ if(!uart_available()) return 0; *c=UDR0; return 1; }
+static void uart_putc(char c){ while(!(UCSR0A&(1<<UDRE0))); UDR0=c; }
+static void uart_puts(const char*s){ while(*s) uart_putc(*s++); }
+static void uart_printf(const char *fmt, ...){
+    char buf[160]; va_list ap; va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
+    uart_puts(buf);
+}
+
+// ADC
+static void adc_init(void){
+    ADMUX  = (1<<REFS0) | (LDR_CH & 0x0F);
+    ADCSRA = (1<<ADEN)  | (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);
+}
+static uint16_t adc_read_once(uint8_t ch){
+    ADMUX = (ADMUX & 0xF0) | (ch & 0x0F);
+    ADCSRA |= (1<<ADSC); while (ADCSRA & (1<<ADSC));
+    uint8_t lo=ADCL, hi=ADCH; return ((uint16_t)hi<<8)|lo;
+}
+
+
