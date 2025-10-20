@@ -176,3 +176,27 @@ static void init_song1(void){
         }
     }
 }
+
+
+
+
+static void init_song2(void){
+    const uint8_t nC = sizeof(LINES_C)/sizeof(LINES_C[0]);
+    const uint16_t tickC = tick_ms_for(TOTAL_MS_C, LINES_C, nC);
+    const uint8_t REP_C = 3;  /* ? repetir 3 veces */
+
+    song2.len = 0;
+    for(uint8_t rep=0; rep<REP_C; rep++){
+        for(uint8_t i=0; i<nC; i++){
+            for(uint16_t j=0; j<LINES_C[i].len; j++){
+                if(song2.len >= MAX_NOTAS) goto fin_c2;  /* seguridad */
+                song2.nota_idx[song2.len] = LINES_C[i].n[j];
+                song2.dur_ms [song2.len]  = (uint16_t)LINES_C[i].d[j]*tickC;
+                song2.len++;
+            }
+        }
+    }
+fin_c2:
+    ;
+}
+
