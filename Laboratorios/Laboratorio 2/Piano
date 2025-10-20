@@ -2,17 +2,40 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-/* PWM en OC1A  prescaler 8 */
-static inline void tono_start_ocr(uint16_t ocr){
-    DDRB  |= (1<<PB1);
-    TCCR1A = (1<<COM1A0);
-    TCCR1B = (1<<WGM12)|(1<<CS11);
-    OCR1A  = ocr;
-}
-static inline void tono_stop(void){
-    TCCR1A = 0; TCCR1B = 0;
-    PORTB &= ~(1<<PB1);
+/* ---------------- Entradas ---------------- */
+static inline void io_init(void){
+  // Botones A0 y A1 (pull-down externo)
+  DDRC &= ~((1<<PC0)|(1<<PC1));
+  PORTC &= ~((1<<PC0)|(1<<PC1));
+
+  // DIP D2..D7 y D8 (activo-alto, sin pull-up)
+  DDRD  &= ~((1<<PD2)|(1<<PD3)|(1<<PD4)|(1<<PD5)|(1<<PD6)|(1<<PD7));
+  PORTD &= ~((1<<PD2)|(1<<PD3)|(1<<PD4)|(1<<PD5)|(1<<PD6)|(1<<PD7));
+  DDRB  &= ~(1<<PB0);
+  PORTB &= ~(1<<PB0);
 }
 
-/* Tabla de notas  LUT de OCR1A*/
+static inline bool botonA0_flanco(void){
+  static uint8_t st=0; uint8_t now=(PINC&(1<<PC0))?1:0;
+  if(now!=st){ _delay_ms(25); now=(PINC&(1<<PC0))?1:0; if(now!=st){ st=now; if(st) return true; } }
+  return false;
+}
+static inline bool botonA1_flanco(void){
+  static uint8_t st=0; uint8_t now=(PINC&(1<<PC1))?1:0;
+  if(now!=st){ _delay_ms(25); now=(PINC&(1<<PC1))?1:0; if(now!=st){ st=now; if(st) return true; } }
+  return false;
+}
+
+/* DIP piano: 0..6=C..B o 0xFF si ninguna */
+static inline uint8_t piano_key(void){
+  if(PIND&(1<<PD2)) return 0; // C
+  if(PIND&(1<<PD3)) return 1; // D
+  if(PIND&(1<<PD4)) return 2; // E
+  if(PIND&(1<<PD5)) return 3; // F
+  if(PIND&(1<<PD6)) return 4; // G
+  if(PIND&(1<<PD7)) return 5; // A
+  if(PINB&(1<<PB0)) return 6; // B
+  return 0xFF;
+}
