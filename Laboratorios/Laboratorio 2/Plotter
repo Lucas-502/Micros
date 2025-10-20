@@ -50,3 +50,25 @@ void linea_Curva(void);
 void izquierda(uint16_t t);
 void abajo(uint16_t t);
 void Linea_con_angulo(uint16_t t, float angulo_grados);
+
+// === Autor B – Ronda 1: Pines, menú y timer ===
+const uint8_t LAPIZAR = (1 << PD2);
+const uint8_t LAPIZAB = (1 << PD3);
+const uint8_t ARR     = (1 << PD4);
+const uint8_t ABB     = (1 << PD5);
+const uint8_t IZQ     = (1 << PD6);
+const uint8_t DER     = (1 << PD7);
+ 
+void MenuUart(uint8_t e){
+	uartTxt("\r\n=== MENU ===\r\n");
+	uartTxt("0: circulo\r\n");
+	uartTxt("1: cruz\r\n");
+	uartTxt("2: triangulo\r\n");
+	uartTxt("3: murcielago\r\n");
+	uartTxt("4: zorro\r\n");
+	uartTxt("Elija numero y Enter...\r\n");
+}
+void Timer(uint16_t t){
+	while(t--){ _delay_ms(1); }
+}
+
