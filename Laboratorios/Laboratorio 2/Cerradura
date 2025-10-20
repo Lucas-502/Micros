@@ -273,3 +273,43 @@ static EST est_camb1(void){
     }
     return E_CAMB2;
 }
+
+// Cambio de clave y cierre 
+static EST est_camb2(void){
+    bool ok = pedir_clave("Nueva clave:   ");
+    if(want_cerrar){ want_cerrar=0; return E_CIERRE; }
+    if(want_menu){   want_menu=0;   return E_MENU;  }
+    if(!ok) return E_BIENV;
+ 
+    eew(0x00, n_ing);
+    for(uint8_t i=0;i<n_ing;i++) eew(0x01+i, ing[i]);
+ 
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Guardada");
+    PORTB |= LV; 
+    _delay_ms(800);
+    PORTB &= ~LV;  
+    PORTB |= BUZ;
+    _delay_ms(120);
+    PORTB &= ~BUZ; PORTB &= ~LV;
+    _delay_ms(700);
+    return E_BIENV;
+}
+ 
+static EST est_cierre(void){
+    pant_cierre();
+    _delay_ms(700);
+    twi_lcd_cmd(0x08);
+ 
+    while(1){
+        char t = Teclado();
+        if(t==T_CER){
+            twi_lcd_cmd(0x0C);
+            pant_bienvenido();
+            _delay_ms(700);
+            pant_opciones();
+            return E_BIENV;
+        }
+    }
+}
+
