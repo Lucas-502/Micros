@@ -106,3 +106,28 @@ static void pant_cierre(void){
     twi_lcd_clear();
     twi_lcd_cmd(0x80); twi_lcd_msg("Cerrando...");
 }
+
+// === Autor A – Ronda 2: Scanner de teclado ===
+static char Teclado(void){
+    PORTD |= (C1|C2);
+    PORTB |= (C3|C4);
+ 
+    for(uint8_t i=0;i<4;i++){
+        if(i<2){ PORTD |= (C1|C2); PORTD &= ~b[i]; }
+        else    { PORTB |= (C3|C4); PORTB &= ~b[i]; }
+        _delay_us(5);
+        for(uint8_t j=0;j<4;j++){                               
+            if( !(PIND & f[j]) ){
+                char t = teclas[i][j];
+                _delay_ms(20); // antirrebote sencillo
+                if(t != '*'){
+                    while( !(PIND & f[j]) ) { _delay_ms(1); }
+                }
+                if(i<2) PORTD |= b[i]; else PORTB |= b[i];
+                return t;
+            }
+        }
+        if(i<2) PORTD |= b[i]; else PORTB |= b[i];
+    }
+    return 0;
+}
