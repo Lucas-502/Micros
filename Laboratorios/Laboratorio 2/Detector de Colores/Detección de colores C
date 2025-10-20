@@ -233,3 +233,56 @@ static void ws_show_GRB(uint8_t g,uint8_t r,uint8_t b){
 }
 static inline void ws_off(void){ ws_show_GRB(0,0,0); }
 static inline void ws_fill(uint8_t R,uint8_t G,uint8_t B){ ws_show_GRB(G,R,B); }
+
+static inline uint16_t sub_sat(uint16_t a, uint16_t b){ return (a>b)?(uint16_t)(a-b):0; }
+
+static uint16_t ambient_avg(void){
+    rgb_off(); _delay_ms(3);
+    uint32_t acc=0;
+    for(uint8_t i=0;i<SAMPLES_AMBIENT;i++){ acc+=adc_read_once(LDR_CH); _delay_ms(SAMPLE_DELAY_MS); }
+    return (uint16_t)(acc/SAMPLES_AMBIENT);
+}
+static uint16_t measure_color(uint8_t r,uint8_t g,uint8_t b){
+    rgb_set(r?RGB_LEVEL:0, g?RGB_LEVEL:0, b?RGB_LEVEL:0);
+    _delay_ms(5);
+    uint32_t acc=0;
+    for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ acc+=adc_read_once(LDR_CH); _delay_ms(SAMPLE_DELAY_MS); }
+    rgb_off(); return (uint16_t)(acc/SAMPLES_PER_COLOR);
+}
+static void measure_triplet_u16(uint16_t m[3]){
+    uint16_t amb = ambient_avg();
+    uint16_t R = measure_color(1,0,0);
+    uint16_t G = measure_color(0,1,0);
+    uint16_t B = measure_color(0,0,1);
+    m[0]=sub_sat(R,amb); m[1]=sub_sat(G,amb); m[2]=sub_sat(B,amb);
+}
+
+static uint8_t chroma8_from_u16(const uint16_t in[3], uint8_t out[3]){
+    uint32_t s=(uint32_t)in[0]+in[1]+in[2];
+    if(s < MIN_SUM_ADC){ out[0]=out[1]=out[2]=0; return 0; }
+    out[0]=(uint8_t)((in[0]*255UL)/s);
+    out[1]=(uint8_t)((in[1]*255UL)/s);
+    out[2]=(uint8_t)((in[2]*255UL)/s);
+    return 1;
+}
+static uint8_t hue_sat_from_rgb8(uint8_t r, uint8_t g, uint8_t b, uint16_t* hue_deg, uint8_t* sat){
+    uint8_t max=r; if(g>max) max=g; if(b>max) max=b;
+    uint8_t min=r; if(g<min) min=g; if(b<min) min=b;
+    uint8_t delta=max-min;
+    if(max==0){ *sat=0; *hue_deg=0; return 0; }
+    *sat=(uint8_t)(((uint16_t)delta*255U)/max);
+    if(delta==0){ *hue_deg=0; return 0; }
+    int32_t h;
+    if(max==r)      h =   0 + 60*(int32_t)((int16_t)g-(int16_t)b)/delta;
+    else if(max==g) h = 120 + 60*(int32_t)((int16_t)b-(int16_t)r)/delta;
+    else            h = 240 + 60*(int32_t)((int16_t)r-(int16_t)g)/delta;
+    while(h<0) h+=360; while(h>=360) h-=360;
+    *hue_deg=(uint16_t)h; return 1;
+}
+static inline uint16_t circ_mid(uint16_t a,uint16_t b){
+    int16_t d=(int16_t)b-(int16_t)a; while(d<-180)d+=360; while(d>180)d-=360;
+    int16_t m=(int16_t)a + d/2; while(m<0)m+=360; while(m>=360)m-=360; return (uint16_t)m;
+}
+static inline uint16_t circ_dist(uint16_t a,uint16_t b){
+    int16_t d=(int16_t)a-(int16_t)b; while(d<-180)d+=360; while(d>180)d-=360; if(d<0)d=-d; return (uint16_t)d;
+}
