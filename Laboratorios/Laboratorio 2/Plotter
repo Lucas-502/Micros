@@ -245,3 +245,29 @@ void Circulo(void){
     subir_lapiz();
 }
 
+int main(void){
+	DDRD |= (LAPIZAR | LAPIZAB | ARR | ABB | IZQ | DER);
+	PORTD |= (LAPIZAR | LAPIZAB | ARR | ABB | IZQ | DER);
+ 
+	uartInicio();
+	uartTxt("Plotter listo\r\n");
+	uartNum(0);
+ 
+	abajo(2000);
+	izquierda(3000);
+	MenuUart(0);
+ 
+	while(1){
+		char c = uartLeer();
+		switch(c){
+			case '0': uartTxt("CIRCULO\r\n");     Circulo();    break;
+			case '1': uartTxt("CRUZ\r\n");        Cruz();       break;
+			case '2': uartTxt("TRIANGULO\r\n");   Triangulo();  break;
+			case '3': uartTxt("MURCIELAGO\r\n");  Murcielago(); break;
+			case '4': uartTxt("ZORRO\r\n");       Zorro();      break;
+			case 'h':
+			case 'H': MenuUart(0);                break;
+			default:  uartTxt("Instruccion incorrecta, intente de nuevo (h para ayuda)\r\n"); break;
+		}
+	}
+}
