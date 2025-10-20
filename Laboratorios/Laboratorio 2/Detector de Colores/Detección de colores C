@@ -1,1 +1,139 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
 
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+
+// HARDWARE
+#define PIN_WS_BIT   PD4          // WS2812 DIN en D4
+#define PIN_SERVO    PB1          // OC1A D9
+#define PIN_R        PD3          // OC2B D3
+#define PIN_G        PD5          // OC0B D5
+#define PIN_B        PD6          // OC0A D6
+#define LDR_CH       0            // ADC0 / A0
+
+#define WS_COUNT     64
+
+// SERVO
+#define SERVO_MIN_US 500
+#define SERVO_MAX_US 2400
+
+// MUESTREO
+#define SAMPLES_PER_COLOR  20
+#define SAMPLE_DELAY_MS     2
+#define SAMPLES_AMBIENT    10
+#define MIN_SUM_ADC        30u
+
+// HUE / SAT
+#define SAT_MIN          28u
+#define TOL_H_PRIM_DEG   28u
+#define TOL_H_SEC_DEG    36u
+
+// LED discreto
+#define RGB_COMMON_ANODE 0
+static inline uint8_t lvl(uint8_t x){ return RGB_COMMON_ANODE ? (255-x) : x; }
+static uint8_t levR=255, levG=255, levB=255;
+static uint8_t RGB_LEVEL = 255;
+
+#define USE_DEFAULT_PROFILE 1
+static const uint16_t DEFAULT_WB[3] = {337, 237, 422};
+static const uint8_t  DEFAULT_LEV_R = 179;
+static const uint8_t  DEFAULT_LEV_G = 255;
+static const uint8_t  DEFAULT_LEV_B = 143;
+static const uint8_t  DEFAULT_PRIM_CHR[3][3] = {
+  {66,128, 60},   // ROJO
+  {57, 86,110},   // VERDE
+  {101,75, 77}    // AZUL
+};
+
+enum { C_ROJO=0, C_VERDE, C_AZUL, C_AMARILLO, C_NARANJA, C_VIOLETA, C_CELESTE, C_ROSADO, C_COUNT };
+static const char* CNAME[C_COUNT] = { "ROJO","VERDE","AZUL","AMARILLO","NARANJA","VIOLETA","CELESTE","ROSADO" };
+static const uint16_t DEFAULT_CENTER_HUE[C_COUNT] = {115, 208, 356, 161, 138, 55, 282, 85};
+
+// Estado de calibraciones
+enum { IDX_R=0, IDX_G=1, IDX_B=2 };
+static uint8_t  prim_ok[3]   = {0,0,0};
+static uint8_t  prim_chr[3][3];
+static uint16_t prim_hue[3];
+static uint16_t center_hue[C_COUNT];
+static uint8_t  center_en[C_COUNT];
+
+static uint16_t wb_ref[3]={0,0,0};
+static uint8_t  wb_ok=0;
+
+// Servo y WS
+static int      servoAngle = 90;
+static uint8_t  servoAuto  = 1;
+static int      lastIdx    = -1;
+static uint8_t  stable     = 0;
+#define STABLE_N 2
+
+// ================= PROTOTIPOS =================
+// UART
+static void   uart_init(void);
+static uint8_t uart_available(void);
+static uint8_t uart_getc_nonblock(char *c);
+static void   uart_putc(char c);
+static void   uart_puts(const char*s);
+static void   uart_printf(const char *fmt, ...);
+
+// ADC
+static void     adc_init(void);
+static uint16_t adc_read_once(uint8_t ch);
+
+// PWM RGB discreto
+static void rgb_pwm_init(void);
+static void rgb_set_raw(uint8_t r,uint8_t g,uint8_t b);
+static void rgb_off(void);
+static void rgb_set(uint8_t r,uint8_t g,uint8_t b);
+
+// SERVO (Timer1)
+static void     servo_init(void);
+static uint16_t us_to_ocr(uint16_t us);
+static void     servo_write_us(uint16_t us);
+static void     servo_set_deg(int a);
+
+// WS2812 (bit-bang)
+static void ws_show_GRB(uint8_t g,uint8_t r,uint8_t b);
+static void ws_off(void);
+static void ws_fill(uint8_t R,uint8_t G,uint8_t B);
+
+// Sensor/color helpers
+static inline uint16_t sub_sat(uint16_t a, uint16_t b);
+static uint16_t ambient_avg(void);
+static uint16_t measure_color(uint8_t r,uint8_t g,uint8_t b);
+static void     measure_triplet_u16(uint16_t m[3]);
+static uint8_t  chroma8_from_u16(const uint16_t in[3], uint8_t out[3]);
+static uint8_t  hue_sat_from_rgb8(uint8_t r, uint8_t g, uint8_t b, uint16_t* hue_deg, uint8_t* sat);
+static uint16_t circ_mid(uint16_t a,uint16_t b);
+static uint16_t circ_dist(uint16_t a,uint16_t b);
+
+// White balance + LED balance
+static void apply_white_balance(const uint16_t in[3], uint16_t out[3]);
+static void wb_calibrate(void);
+static void led_balance_calibrate(void);
+static uint8_t gain_from_pair(uint16_t x,uint16_t tgt);
+
+// Centros / primarios / clasificación
+static void recompute_centers(void);
+static void calibrate_primary(uint8_t idx);
+static int  classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s_out);
+
+// Servo + Matriz
+static void matrix_for_color(int cid);
+static void servo_on_color_idx(int cid);
+
+// UI
+static void print_menu(void);
+static void show_rgb_refs(void);
+static void show_centers(void);
+static void debug_distances_ui(const uint16_t raw0[3]);
+
+// Perfil + main
+static void load_defaults(void);
