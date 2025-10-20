@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ======= HARDWARE ======= */
+// HARDWARE 
 const uint8_t PIN_LDR   = A0;  // LDR en A0 (ADC0)
 const uint8_t PIN_R     = 3;   // D3  (Timer2 PWM)  -> ROJO del LED discreto
 const uint8_t PIN_G     = 5;   // D5  (Timer0 PWM)  -> VERDE
@@ -13,14 +13,14 @@ const uint8_t PIN_B     = 6;   // D6  (Timer0 PWM)  -> AZUL
 const uint8_t PIN_SERVO = 9;   // Servo SG90 en D9 (Timer1 + Servo.h)
 const uint8_t PIN_WS    = 4;   // DIN de WS2812 (usar 330–470 Ω en serie recomendado)
 
-/* ======= SERVO ======= */
+// SERVO 
 #define SERVO_MIN_US  500
 #define SERVO_MAX_US  2400
 Servo servo;
 static int  servoAngle = 90;
 static bool servoAuto  = true;   // modo automático ON/OFF
 
-/* ======= WS2812 ======= */
+//  WS2812
 #define WS_COUNT 64
 Adafruit_NeoPixel strip(WS_COUNT, PIN_WS, NEO_GRB + NEO_KHZ800);
 uint8_t wsBrightness = 30;
@@ -30,7 +30,7 @@ static inline void ws_fill(uint8_t R,uint8_t G,uint8_t B){
   strip.show();
 }
 
-/* ======= LED RGB discreto ======= */
+//  LED RGB discreto 
 #define RGB_COMMON_ANODE  0     // 0=cátodo común, 1=ánodo común
 static inline uint8_t  lvl(uint8_t x){ return RGB_COMMON_ANODE ? (255-x) : x; }
 static inline void     rgbSetRaw(uint8_t r,uint8_t g,uint8_t b){
@@ -40,14 +40,14 @@ static inline void     rgbSetRaw(uint8_t r,uint8_t g,uint8_t b){
 }
 static inline void     rgbOff(){ rgbSetRaw(0,0,0); }
 
-/* === Balance de niveles por canal (para igualar LED discreto) === */
+// Balance de niveles por canal 
 uint8_t levR=255, levG=255, levB=255;
 uint8_t RGB_LEVEL = 255;
 static inline void rgbSet(uint8_t r,uint8_t g,uint8_t b){
   rgbSetRaw(r?levR:0, g?levG:0, b?levB:0);
 }
 
-/* ======= MUESTREO / ADC ======= */
+// MUESTREO / ADC
 #define SAMPLES_PER_COLOR  20
 #define SAMPLE_DELAY_MS     2
 #define SAMPLES_AMBIENT    10
@@ -82,7 +82,7 @@ static void measureTripletU16(uint16_t m[3]){
   m[0]=sub_sat(R,amb); m[1]=sub_sat(G,amb); m[2]=sub_sat(B,amb);
 }
 
-/* ======= Cromaticidad / Hue ======= */
+// Cromaticidad / Hue
 #define SAT_MIN          28u
 #define TOL_H_PRIM_DEG   28u
 #define TOL_H_SEC_DEG    36u
@@ -124,7 +124,7 @@ static inline uint16_t circ_dist(uint16_t a, uint16_t b){
   return (uint16_t)d;
 }
 
-/* ======= White Balance (WB) ======= */
+// White Balance (WB) 
 static uint16_t wb_ref[3]={0,0,0};
 static uint8_t  wb_ok=0;
 
@@ -182,7 +182,7 @@ static void led_balance_calibrate(){
   Serial.println(F("\r\n> "));
 }
 
-/* ======= PRIMARIOS y CENTROS ======= */
+// PRIMARIOS y CENTROS 
 enum { IDX_R=0, IDX_G=1, IDX_B=2 };
 
 enum {
@@ -194,7 +194,7 @@ static const char* CNAME[C_COUNT] = {
   "ROJO","VERDE","AZUL","AMARILLO","NARANJA","VIOLETA","CELESTE","ROSADO"
 };
 
-/* PERFIL por defecto (tus valores buenos) */
+
 #define USE_DEFAULT_PROFILE  1
 static const uint16_t DEFAULT_WB[3] = {337, 237, 422};
 static const uint8_t  DEFAULT_LEV_R = 179;
@@ -259,7 +259,7 @@ static void calibrate_primary(uint8_t idx){
   Serial.println(F("\r\n> "));
 }
 
-/* ======= Clasificación por HUE ======= */
+
 static int classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s_out){
   uint16_t raw[3]; apply_white_balance(raw_meas0, raw);
   uint8_t chr[3];
@@ -279,7 +279,7 @@ static int classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s
   return best_i;
 }
 
-/* ======= Debug distancias ======= */
+// Debug distancias 
 static void debug_distances(const uint16_t raw0[3]){
   uint16_t raw[3]; apply_white_balance(raw0, raw);
   uint8_t chr[3];
@@ -299,7 +299,7 @@ static void debug_distances(const uint16_t raw0[3]){
   }
 }
 
-/* ======= Perfil por defecto ======= */
+
 static void load_defaults(){
   // LED levels
   levR = DEFAULT_LEV_R; levG = DEFAULT_LEV_G; levB = DEFAULT_LEV_B;
@@ -331,13 +331,13 @@ static void load_defaults(){
   Serial.println(F("\r\n> "));
 }
 
-/* ======= Servo + Matriz (enciende SOLO si el servo se mueve a 0/60/120/180) ======= */
+// Servo + Matriz (enciende SOLO si el servo se mueve a 0/60/120/180)
 static inline void servo_set_deg(int a){
   if(a<0) a=0; if(a>180) a=180;
   if(a!=servoAngle){ servoAngle=a; servo.write(a); }
 }
 
-/* mapa pedido: 0° violeta, 60° rosado, 120° rojo, 180° amarillo */
+// mapa pedido: 0° violeta, 60° rosado, 120° rojo, 180° amarillo 
 static void matrix_for_color(int cid){
   switch(cid){
     case C_VIOLETA:  ws_fill(180,  0,220); break;
@@ -347,7 +347,7 @@ static void matrix_for_color(int cid){
     default:         ws_off();             break;
   }
 }
-/* mover servo según color; actualizar matriz SOLO si hubo movimiento y SOLO 4 colores */
+// mover servo según color; actualizar matriz SOLO si hubo movimiento y SOLO 4 colores 
 static void servo_on_color_idx(int cid){
   int target=-1;
   if      (cid==C_VIOLETA)  target=  0;
@@ -360,15 +360,13 @@ static void servo_on_color_idx(int cid){
     servo_set_deg(target);   // se movió
     matrix_for_color(cid);   // ahora sí: encender matriz
   }
-  // Si no cambió el ángulo: NO tocamos la matriz (queda como estaba)
 }
 
-/* ======= Histeresis simple para servo AUTO ======= */
+// Histeresis simple para servo AUTO 
 static int      lastIdx = -1;
 static uint8_t  stable  = 0;
 #define STABLE_N  2   // mover cuando repite >=2 veces seguidas
 
-/* ======= Utils ======= */
 static void s_printf(const char *fmt, ...) {
   char buf[160];
   va_list ap; va_start(ap, fmt);
@@ -377,7 +375,7 @@ static void s_printf(const char *fmt, ...) {
   Serial.print(buf);
 }
 
-/* ======= UI ======= */
+// Menu
 static void print_menu(){
   Serial.println(F("\r\n===== MENU ====="));
   Serial.println(F(" 1/2/3) Calibrar ROJO/VERDE/AZUL"));
@@ -416,7 +414,7 @@ static void show_centers(){
   Serial.print(F("> "));
 }
 
-/* ======= Arduino ======= */
+// Arduino 
 void setup(){
   pinMode(PIN_R, OUTPUT);
   pinMode(PIN_G, OUTPUT);
