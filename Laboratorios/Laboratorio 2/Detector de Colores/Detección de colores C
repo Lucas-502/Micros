@@ -385,3 +385,53 @@ static void servo_on_color_idx(int cid){
     else { ws_off(); return; }
     if(target!=servoAngle){ servo_set_deg(target); matrix_for_color(cid); }
 }
+
+//UI (menú) y utilidades de debug
+
+static void print_menu(void){
+    uart_puts("\r\n===== MENU =====\r\n");
+    uart_puts(" 1/2/3) Calibrar ROJO/VERDE/AZUL\r\n");
+    uart_puts(" L) LED balance  |  w) White balance\r\n");
+    uart_puts(" m) Medir+clasif |  d) Debug distancias\r\n");
+    uart_puts(" h) Mostrar centros  |  s) Mostrar primarios\r\n");
+    uart_puts(" z) Cargar perfil por defecto\r\n");
+    uart_puts(" j) Test RGB (R,G,B)\r\n");
+    uart_puts(" u) Servo AUTO on/off | A/B/C/D/E = 0/45/90/135/180 | p) angulo\r\n");
+    uart_puts(" x) Borrar calibraciones\r\n> ");
+}
+static void show_rgb_refs(void){
+    uart_puts("\r\n--- PRIMARIOS (r,g,b; H,S) ---\r\n");
+    for(uint8_t i=0;i<3;i++){
+        const char* nm=(i==0?"ROJO":(i==1?"VERDE":"AZUL"));
+        if(prim_ok[i]){
+            uint16_t h; uint8_t s;
+            hue_sat_from_rgb8(prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], &h,&s);
+            uart_printf("%-5s: r=%3u g=%3u b=%3u | H=%3u S=%3u\r\n",
+                        nm, prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], h, s);
+        }else uart_printf("%-5s: (sin calibrar)\r\n", nm);
+    }
+    uart_printf("LEV: R=%u G=%u B=%u | WB:%s | Servo:%s @%d\r\n> ",
+                levR,levG,levB, wb_ok?"OK":"NO", servoAuto?"AUTO":"MAN", servoAngle);
+}
+static void show_centers(void){
+    uart_puts("\r\n--- CENTROS (H en grados) ---\r\n");
+    for(uint8_t i=0;i<C_COUNT;i++){
+        uart_puts(CNAME[i]); uart_puts(": ");
+        if(center_en[i]) uart_printf("H=%u\r\n", center_hue[i]); else uart_puts("(deshabilitado)\r\n");
+    }
+    uart_puts("> ");
+}
+static void debug_distances_ui(const uint16_t raw0[3]){
+    uint16_t raw[3]; apply_white_balance(raw0,raw);
+    uint8_t chr[3]; if(!chroma8_from_u16(raw,chr)){ uart_puts("POCA_LUZ\r\n> "); return; }
+    uint16_t h; uint8_t s; hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h,&s);
+    uart_printf("NORM=(%u,%u,%u) H=%u S=%u\r\n", chr[0],chr[1],chr[2], h, s);
+    for(uint8_t i=0;i<C_COUNT;i++){
+        if(!center_en[i]) continue;
+        uint16_t d=circ_dist(h, center_hue[i]);
+        uint16_t tol=(i<=C_AZUL)?TOL_H_PRIM_DEG:TOL_H_SEC_DEG;
+        uart_printf(" %-8s: Hc=%3u  d=%3u  %s\r\n", CNAME[i], center_hue[i], d, (d<=tol?"<--":""));
+    }
+    uart_puts("> ");
+}
+
