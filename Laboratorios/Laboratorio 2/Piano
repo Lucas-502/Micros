@@ -268,3 +268,80 @@ static uint8_t procesar_atajo(char c){
     return 0;
 }
 
+int main(void){
+    entradas_init(); uart_init();
+    init_song1(); init_song2();
+    _delay_ms(100);
+    mostrar_menu();
+
+
+    #define CMD_MAX 16
+    char linea[CMD_MAX]; 
+    uint8_t lin_len=0;
+
+    /* Teclado */
+    uint8_t ultima_nota = 0xFF;
+
+    while(1){
+        char c = uart_getchar_nb();
+        if(c != '\0'){
+            /* Echo de depuración “visible” */
+            if(c=='\r') { uart_puts("\\r"); }
+            else if(c=='\n'){ uart_puts("\\n"); }
+            else if(c==8 || c==127){ /* backspace */
+                if(lin_len>0){ lin_len--; uart_puts("\b \b"); }
+            }else{
+                uart_putchar(c);
+            }
+
+            /* Atajos sin Enter */
+            if(procesar_atajo(c)){ lin_len=0; }
+
+            /* Enter (CR o LF o CRLF) */
+            if(c=='\r' || c=='\n'){
+                if(lin_len>0){
+                    linea[lin_len]='\0';
+                    uart_puts("\r\n");
+                    procesar_comando_linea(linea);
+                }
+                lin_len=0;
+            }
+            /* Cargar buffer de línea */
+            else if(c >= ' ' && c <= '~'){
+                if(lin_len < CMD_MAX-1){
+                    linea[lin_len++] = c;
+                }else{
+                    linea[lin_len]='\0';
+                    uart_puts("\r\n");
+                    procesar_comando_linea(linea);
+                    lin_len=0;
+                }
+            }
+        }
+        if(modo_teclado && !reproduciendo){
+            uint8_t r = nota_estable();
+            if(r != 0xFE){
+                if(r < 8){
+                    if(r != ultima_nota){
+                        pwm_note((enum Note)(C4 + r));
+                        uart_puts(">>> Tocando: ");
+                        static const char* nombres[8] = {
+                            "Do(C4)", "Re(D4)", "Mi(E4)", "Fa(F4)",
+                            "Sol(G4)", "La(A4)", "Si(B4)", "Do(C5)"
+                        };
+                        uart_puts(nombres[r]); uart_puts("\r\n");
+                        ultima_nota = r;
+                    }
+                }else{
+                    pwm_stop();
+                    ultima_nota = 0xFF;
+                }
+            }
+        }
+        if(reproduciendo){
+            step_player();
+        }
+
+        _delay_ms(1);
+    }
+}
