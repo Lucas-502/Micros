@@ -133,3 +133,57 @@ void derecha(uint16_t t){
 	Timer(t);
 	PORTD |=  DER;
 }
+
+//  Línea por ángulo y diagonales
+void Linea_con_angulo(uint16_t t, float angulo_grados){
+    const uint16_t PASO_MS    = 10;
+    const uint16_t VENTANA_MS = PASO_MS * 10;
+    const uint8_t  TICKS_VENT = (uint8_t)(VENTANA_MS / PASO_MS);
+ 
+    const float porcentaje_max = 0.92f;
+    const float umbral_minimo  = 0.03f;
+ 
+    float a = fmodf(angulo_grados, 360.0f);
+    if (a < 0.0f) a += 360.0f;
+    float rad = a * (float)M_PI / 180.0f;
+    float comp_x = cosf(rad);
+    float comp_y = sinf(rad);
+ 
+    uint8_t pinX_activo = (comp_x >= 0.0f) ? DER : IZQ;
+    uint8_t pinY_activo = (comp_y >= 0.0f) ? ARR : ABB;
+ 
+    float ax = fabsf(comp_x), ay = fabsf(comp_y);
+    int ticks_x = (int)((porcentaje_max * ax * (float)VENTANA_MS + 0.5f) / (float)PASO_MS);
+    int ticks_y = (int)((porcentaje_max * ay * (float)VENTANA_MS + 0.5f) / (float)PASO_MS);
+ 
+    if (ax > umbral_minimo && ticks_x == 0) ticks_x = 1;
+    if (ay > umbral_minimo && ticks_y == 0) ticks_y = 1;
+    if (ticks_x >= (int)TICKS_VENT) ticks_x = (int)TICKS_VENT - 1;
+    if (ticks_y >= (int)TICKS_VENT) ticks_y = (int)TICKS_VENT - 1;
+ 
+    uint16_t ticks_totales = (t / PASO_MS);
+    if (ticks_totales == 0) ticks_totales = 1;
+ 
+    uint8_t fase = 0;
+    for(uint16_t k = 0; k < ticks_totales; ++k){
+        PORTD |= (DER | IZQ | ARR | ABB);
+        if (fase < (uint8_t)ticks_x) { PORTD &= ~pinX_activo; }
+        if (fase < (uint8_t)ticks_y) { PORTD &= ~pinY_activo; }
+        Timer(PASO_MS);
+        fase++;
+        if (fase >= TICKS_VENT) fase = 0;
+    }
+    PORTD |= (DER | IZQ | ARR | ABB);
+}
+void Diagonal225(uint16_t t){
+	PORTD |=  DER; PORTD |=  ARR;
+	PORTD &= ~ABB; PORTD &= ~IZQ;
+	Timer(t);
+	PORTD |=  ABB; PORTD |=  IZQ;
+}
+void Diagonal135(uint16_t t){
+	PORTD |=  ABB; PORTD |=  DER;
+	PORTD &= ~IZQ; PORTD &= ~ARR;
+	Timer(t);
+	PORTD |=  IZQ; PORTD |=  ARR;
+}
