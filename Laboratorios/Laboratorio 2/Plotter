@@ -188,7 +188,6 @@ void Diagonal135(uint16_t t){
 	PORTD |=  IZQ; PORTD |=  ARR;
 }
 
-
 extern const uint8_t ZORR_1_MOVS_R2_3_DATA[] PROGMEM;
 #define ZORRO_BYTES  ZORR_1_MOVS_R2_3_BYTES
 void Zorro(void){
@@ -200,4 +199,26 @@ extern const uint8_t SCREENSHOT_2025_10_03_155654_MOVS_R2_3_DATA[] PROGMEM;
 void Murcielago(void){
     izquierda(3000);
     ejecutar_compacto_escalado(SCREENSHOT_2025_10_03_155654_MOVS_R2_3_DATA, MURCI_BYTES, 1, 5, 1, 255);
+}
+
+void Cruz(void){
+	izquierda(3000);
+	bajar_lapiz();
+	_delay_ms(200);
+	Diagonal225(3000);
+	subir_lapiz();
+	derecha(3000);
+	bajar_lapiz();
+	Diagonal135(3000);
+	subir_lapiz();
+}
+void Triangulo(void){
+	abajo(3000);
+	bajar_lapiz();
+	_delay_ms(300);
+	Diagonal225(3000);
+	derecha(6000);
+	Diagonal135(3000);
+	_delay_ms(300);
+	subir_lapiz();
 }
