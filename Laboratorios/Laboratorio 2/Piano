@@ -20,7 +20,6 @@ static inline void uart_putchar(char c){ while(!(UCSR0A&(1<<UDRE0))); UDR0=c; }
 static void uart_puts(const char* s){ while(*s) uart_putchar(*s++); }
 
 // PWM (ICR1)
-/* Modo 14: FAST-PWM TOP=ICR1; f = F_CPU/(N*(1+ICR1)), N=8 ? ICR1?2e6/f - 1 */
 static inline void pwm_stop(void){
     TCCR1A=0; TCCR1B=0;
     PORTB &= ~(1<<PB1);
@@ -29,7 +28,7 @@ static inline void pwm_set_icr(uint16_t top){
     if(!top){ pwm_stop(); return; }
     DDRB  |= (1<<PB1);
     TCCR1A = (1<<COM1A1) | (1<<WGM11);
-    TCCR1B = (1<<WGM12) | (1<<WGM13) | (1<<CS11); /* prescaler 8 */
+    TCCR1B = (1<<WGM12) | (1<<WGM13) | (1<<CS11);
     ICR1   = top;
     OCR1A  = (top+1)/2; /* ~50% */
 }
@@ -51,7 +50,6 @@ static inline void entradas_init(void){
     DDRB &= ~(1<<PB0); PORTB &= ~(1<<PB0);
     DDRC &= ~(1<<PC0); PORTC &= ~(1<<PC0);
 }
-/* 0..7 (C4..B4) según prioridad grave?agudo; 0xFF = nada */
 static inline uint8_t leer_crudo(void){
     if(PIND&(1<<PD2)) return 0;
     if(PIND&(1<<PD3)) return 1;
@@ -80,7 +78,7 @@ typedef struct{
 } Cancion;
 
 static Cancion song1, song2;
-static uint8_t reproduciendo=0; /* 0=ninguna, 1=song1, 2=song2 */
+static uint8_t reproduciendo=0;
 static uint16_t i_note=0, t_cnt=0;
 static uint8_t modo_teclado=1;
 
@@ -146,11 +144,35 @@ static const Line LINES_C[] = {
 };
 #define TOTAL_MS_C 7000
 
-/* === helpers de tiempo compartidos === */
+// helpers de tiempo compartidos
 static uint32_t sum_units(const Line *L, uint8_t n){
     uint32_t s=0; for(uint8_t i=0;i<n;i++) for(uint16_t j=0;j<L[i].len;j++) s+=L[i].d[j]; return s;
 }
 static uint16_t tick_ms_for(uint32_t total_ms, const Line *L, uint8_t n){
     uint32_t T=sum_units(L,n); if(!T) T=1;
-    return (uint16_t)((total_ms + T/2)/T); /* redondeo */
+    return (uint16_t)((total_ms + T/2)/T); 
+}
+
+// Build Canción 1 (A+B)
+static void init_song1(void){
+    const uint8_t nA = sizeof(LINES_A)/sizeof(LINES_A[0]);
+    const uint8_t nB = sizeof(LINES_B)/sizeof(LINES_B[0]);
+    const uint16_t tickA = tick_ms_for(TOTAL_MS_A, LINES_A, nA);
+    const uint16_t tickB = tick_ms_for(TOTAL_MS_B, LINES_B, nB);
+
+    song1.len = 0;
+    for(uint8_t i=0;i<nA;i++){
+        for(uint16_t j=0;j<LINES_A[i].len && song1.len<MAX_NOTAS; j++){
+            song1.nota_idx[song1.len] = LINES_A[i].n[j];
+            song1.dur_ms [song1.len]  = (uint16_t)LINES_A[i].d[j]*tickA;
+            song1.len++;
+        }
+    }
+    for(uint8_t i=0;i<nB;i++){
+        for(uint16_t j=0;j<LINES_B[i].len && song1.len<MAX_NOTAS; j++){
+            song1.nota_idx[song1.len] = LINES_B[i].n[j];
+            song1.dur_ms [song1.len]  = (uint16_t)LINES_B[i].d[j]*tickB;
+            song1.len++;
+        }
+    }
 }
