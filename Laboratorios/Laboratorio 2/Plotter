@@ -187,3 +187,17 @@ void Diagonal135(uint16_t t){
 	Timer(t);
 	PORTD |=  IZQ; PORTD |=  ARR;
 }
+
+
+extern const uint8_t ZORR_1_MOVS_R2_3_DATA[] PROGMEM;
+#define ZORRO_BYTES  ZORR_1_MOVS_R2_3_BYTES
+void Zorro(void){
+    izquierda(3000);
+    ejecutar_compacto_escalado(ZORR_1_MOVS_R2_3_DATA, ZORRO_BYTES, 1, 9, 1, 255);
+}
+extern const uint8_t SCREENSHOT_2025_10_03_155654_MOVS_R2_3_DATA[] PROGMEM;
+#define MURCI_BYTES  SCREENSHOT_2025_10_03_155654_MOVS_R2_3_BYTES
+void Murcielago(void){
+    izquierda(3000);
+    ejecutar_compacto_escalado(SCREENSHOT_2025_10_03_155654_MOVS_R2_3_DATA, MURCI_BYTES, 1, 5, 1, 255);
+}
