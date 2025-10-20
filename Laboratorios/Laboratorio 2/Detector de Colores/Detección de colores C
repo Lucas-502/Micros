@@ -286,3 +286,35 @@ static inline uint16_t circ_mid(uint16_t a,uint16_t b){
 static inline uint16_t circ_dist(uint16_t a,uint16_t b){
     int16_t d=(int16_t)a-(int16_t)b; while(d<-180)d+=360; while(d>180)d-=360; if(d<0)d=-d; return (uint16_t)d;
 }
+
+// balance blancos y balance led
+
+static void apply_white_balance(const uint16_t in[3], uint16_t out[3]){
+    if(!wb_ok){ out[0]=in[0]; out[1]=in[1]; out[2]=in[2]; return; }
+    uint32_t s=(uint32_t)wb_ref[0]+wb_ref[1]+wb_ref[2];
+    if(s==0){ out[0]=in[0]; out[1]=in[1]; out[2]=in[2]; return; }
+    uint32_t tgt=s/3;
+    for(uint8_t i=0;i<3;i++){ uint32_t den=wb_ref[i]?wb_ref[i]:1; uint32_t v=(uint32_t)in[i]*tgt/den; if(v>65535U)v=65535U; out[i]=(uint16_t)v; }
+}
+static void wb_calibrate(void){
+    uint16_t raw[3]; measure_triplet_u16(raw);
+    wb_ref[0]=raw[0]; wb_ref[1]=raw[1]; wb_ref[2]=raw[2]; wb_ok=1;
+    uart_printf("WB blanco RAW: R=%u G=%u B=%u\r\n> ", wb_ref[0],wb_ref[1],wb_ref[2]);
+}
+
+static uint8_t gain_from_pair(uint16_t x,uint16_t tgt){ if(x==0) return 255; uint32_t v=(uint32_t)RGB_LEVEL*tgt/x; if(v>255)v=255; return (uint8_t)v; }
+static void led_balance_calibrate(void){
+    uint16_t amb = ambient_avg();
+    rgb_set_raw(255,0,0); _delay_ms(5); uint32_t aR=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aR+=adc_read_once(LDR_CH); _delay_ms(SAMPLE_DELAY_MS); } rgb_off();
+    rgb_set_raw(0,255,0); _delay_ms(5); uint32_t aG=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aG+=adc_read_once(LDR_CH); _delay_ms(SAMPLE_DELAY_MS); } rgb_off();
+    rgb_set_raw(0,0,255); _delay_ms(5); uint32_t aB=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aB+=adc_read_once(LDR_CH); _delay_ms(SAMPLE_DELAY_MS); } rgb_off();
+    uint16_t r0=sub_sat((uint16_t)(aR/SAMPLES_PER_COLOR),amb);
+    uint16_t g0=sub_sat((uint16_t)(aG/SAMPLES_PER_COLOR),amb);
+    uint16_t b0=sub_sat((uint16_t)(aB/SAMPLES_PER_COLOR),amb);
+    uint32_t s=(uint32_t)r0+g0+b0; if(s<3){ uart_puts("LED balance: poca luz\r\n> "); return; }
+    uint16_t tgt=(uint16_t)(s/3);
+    levR=gain_from_pair(r0,tgt); levG=gain_from_pair(g0,tgt); levB=gain_from_pair(b0,tgt);
+    uart_printf("LED balance: rawW R=%u G=%u B=%u -> levR=%u levG=%u levB=%u\r\n> ",
+                r0,g0,b0, levR,levG,levB);
+}
+
