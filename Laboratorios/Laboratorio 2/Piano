@@ -3,3 +3,33 @@
 #include <util/delay.h>
 #include <stdint.h>
 #include <stdbool.h>
+
+/* UART */
+#define BAUD 9600UL
+#define UBRR_VAL ((F_CPU/(16UL*BAUD))-1)
+
+static inline void uart_init(void){
+    UBRR0H = (uint8_t)(UBRR_VAL>>8);
+    UBRR0L = (uint8_t)(UBRR_VAL);
+    UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+    UCSR0C = (1<<UCSZ01)|(1<<UCSZ00);
+}
+static inline uint8_t uart_available(void){ return (UCSR0A&(1<<RXC0)); }
+static inline char uart_getchar_nb(void){ return uart_available()? UDR0 : '\0'; }
+static inline void uart_putchar(char c){ while(!(UCSR0A&(1<<UDRE0))); UDR0=c; }
+static void uart_puts(const char* s){ while(*s) uart_putchar(*s++); }
+
+/* ================ PWM (ICR1) ================= */
+/* Modo 14: FAST-PWM TOP=ICR1; f = F_CPU/(N*(1+ICR1)), N=8 ? ICR1?2e6/f - 1 */
+static inline void pwm_stop(void){
+    TCCR1A=0; TCCR1B=0;
+    PORTB &= ~(1<<PB1);
+}
+static inline void pwm_set_icr(uint16_t top){
+    if(!top){ pwm_stop(); return; }
+    DDRB  |= (1<<PB1);
+    TCCR1A = (1<<COM1A1) | (1<<WGM11);
+    TCCR1B = (1<<WGM12) | (1<<WGM13) | (1<<CS11); /* prescaler 8 */
+    ICR1   = top;
+    OCR1A  = (top+1)/2; /* ~50% */
+}
