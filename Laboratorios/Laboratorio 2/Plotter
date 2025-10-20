@@ -51,7 +51,6 @@ void izquierda(uint16_t t);
 void abajo(uint16_t t);
 void Linea_con_angulo(uint16_t t, float angulo_grados);
 
-// === Autor B – Ronda 1: Pines, menú y timer ===
 const uint8_t LAPIZAR = (1 << PD2);
 const uint8_t LAPIZAB = (1 << PD3);
 const uint8_t ARR     = (1 << PD4);
@@ -72,3 +71,32 @@ void Timer(uint16_t t){
 	while(t--){ _delay_ms(1); }
 }
 
+static void bajar_lapiz(void);
+static void subir_lapiz(void);
+static void Linea_con_angulo(uint16_t t, float angulo_grados);
+ 
+static void ejecutar_compacto_escalado(const uint8_t* data, uint16_t nbytes,
+                                       uint8_t num, uint8_t den,
+                                       uint8_t t10_min, uint8_t t10_max){
+    if (den == 0) den = 1;
+    uint16_t i = 0;
+    while (i < nbytes){
+        uint8_t b = pgm_read_byte(&data[i++]);
+ 
+        if (b == 0xFE){
+            bajar_lapiz();
+        } else if (b == 0xFF){
+            subir_lapiz();
+        } else {
+            if (i >= nbytes) break;
+            uint8_t t10 = pgm_read_byte(&data[i++]);
+            uint16_t t10s = (uint16_t)((uint32_t)t10 * num + (den/2)) / den;
+            if (t10s < t10_min) t10s = t10_min;
+            if (t10s > t10_max) t10s = t10_max;
+ 
+            float ang = (float)b * (360.0f/254.0f);
+            uint16_t t_ms = (uint16_t)t10s * 10u;
+            Linea_con_angulo(t_ms, ang);
+        }
+    }
+}
