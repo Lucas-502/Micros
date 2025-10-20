@@ -72,3 +72,37 @@ static uint8_t n_ing=0;
 static uint8_t ver=0;                
 static volatile uint8_t want_cerrar=0;
 static volatile uint8_t want_menu=0;
+
+typedef enum { E_BIENV=0, E_VERIF, E_MENU, E_CAMB1, E_CAMB2, E_CIERRE } EST;
+ 
+static void pant_bienvenido(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Bienvenido");
+}
+static void pant_opciones(void){
+    twi_lcd_cmd(0xC0); twi_lcd_msg("A:Entrar M:Menu");
+}
+static void pant_pedir(const char *titulo){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg(titulo); /* <=16 */
+}
+static void pant_ok(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Acceso concedido");
+}
+static void pant_err(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Clave invalida");
+}
+static void pant_int(uint8_t n){
+    twi_lcd_cmd(0xC0); twi_lcd_msg("Intento ");
+    twi_lcd_dwr('0'+n); twi_lcd_msg("/3");
+}
+static void pant_alerta(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("ALERTA! 3 fallos");
+}
+static void pant_cierre(void){
+    twi_lcd_clear();
+    twi_lcd_cmd(0x80); twi_lcd_msg("Cerrando...");
+}
