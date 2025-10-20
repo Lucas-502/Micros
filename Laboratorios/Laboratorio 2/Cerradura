@@ -179,3 +179,65 @@ static bool pedir_clave(const char *titulo){
         }
     }
 }
+
+static EST est_bienv(void){
+    pant_bienvenido();
+    _delay_ms(700);
+    pant_opciones();
+ 
+    while(1){
+        char t = Teclado();
+        if(!t) continue;
+        if(t==T_CER) return E_CIERRE; 
+        if(t==T_MEN) return E_MENU;
+        if(t==T_OK)  return E_VERIF;
+    }
+}
+ 
+// Estado: Verificación (3 intentos)
+static EST est_verif(void){
+    uint8_t intentos=0;
+ 
+    while(1){
+        bool ok = pedir_clave("Clave (4-6):   ");
+        if(want_cerrar){ want_cerrar=0; return E_CIERRE; }
+        if(want_menu){   want_menu=0;   return E_MENU;  }
+        if(!ok) return E_BIENV;
+ 
+        uint8_t lg = eer(0x00);
+        bool eq = (n_ing==lg) && (lg>=LMIN && lg<=LMAX);
+        for(uint8_t i=0;i<lg && eq;i++){
+            if(ing[i] != eer(0x01+i)) eq=false;
+        }
+ 
+        if(eq){
+            pant_ok();
+            PORTB |= LV; 
+            PORTB &= ~LR;
+            _delay_ms(800);
+            PORTB &= ~LV;
+            PORTB |= BUZ; _delay_ms(100); PORTB &= ~BUZ;
+            _delay_ms(900);
+            return E_BIENV;
+        }else{
+            intentos++;
+            pant_err();
+            pant_int(intentos);
+            PORTB |= LR;
+            PORTB &= ~LV;
+            _delay_ms(800);
+            PORTB &= ~LR;
+            PORTB |= BUZ; _delay_ms(80); PORTB &= ~BUZ; _delay_ms(80);
+            PORTB |= BUZ; _delay_ms(80); PORTB &= ~BUZ;
+            _delay_ms(800);
+            if(intentos>=MAXI){
+                pant_alerta();
+                for(uint8_t i=0;i<4;i++){
+                    PORTB |= LR; PORTB |= BUZ; _delay_ms(200);
+                    PORTB &= ~BUZ; PORTB &= ~LR; _delay_ms(130);
+                }
+                return E_BIENV;
+            }
+        }
+    }
+}
