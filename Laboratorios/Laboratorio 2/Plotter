@@ -1,0 +1,52 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+ 
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
+#include <math.h>
+#include <avr/pgmspace.h>
+#include "zorr-1_compacto_r2_3.h"
+#include "Screenshot-2025-10-03-155654_compacto_r2_3.h"
+ 
+static void uartInicio(void){
+	UBRR0H = 0;
+	UBRR0L = 103;
+	UCSR0A = 0;
+	UCSR0B = (1<<TXEN0) | (1<<RXEN0);
+	UCSR0C = (1<<UCSZ01)|(1<<UCSZ00);
+}
+static void uartChar(char c){
+	while(!(UCSR0A & (1<<UDRE0)));
+	UDR0 = c;
+}
+static void uartTxt(const char* s){
+	while(*s) uartChar(*s++);
+}
+static void uartNum(uint16_t n){
+	if(n==0){ uartChar('0'); return; }
+	char buf[8]; uint8_t i=0;
+	while(n){ buf[i++] = '0' + (n%10); n/=10; }
+	while(i--) uartChar(buf[i]);
+}
+static char uartLeer(void){
+	while(!(UCSR0A & (1<<RXC0)));
+	return UDR0;
+}
+ 
+void MenuUart(uint8_t e);
+void Timer(uint16_t t);
+void Controldepines(void);
+void Cruz(void);
+void Triangulo(void);
+void Circulo(void);
+void Murcielago(void);
+void Zorro(void);
+void Linea_con_angulo(void);
+void Diagonal135(uint16_t t);
+void Diagonal225(uint16_t t);
+void linea_Curva(void);
+void izquierda(uint16_t t);
+void abajo(uint16_t t);
+void Linea_con_angulo(uint16_t t, float angulo_grados);
