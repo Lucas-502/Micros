@@ -200,3 +200,28 @@ fin_c2:
     ;
 }
 
+//Reproductor:
+
+static void start_song(uint8_t n){
+    reproduciendo = n; i_note=0; t_cnt=0; modo_teclado = 0;
+    uart_puts("\r\n>>> Reproduciendo cancion ");
+    uart_putchar('0'+n); uart_puts("...\r\n");
+}
+static void stop_song(void){
+    reproduciendo=0; i_note=0; t_cnt=0; pwm_stop();
+    uart_puts("\r\n>>> Reproduccion detenida\r\n");
+}
+static void step_player(void){
+    if(!reproduciendo) return;
+    Cancion* s = (reproduciendo==1)? &song1 : &song2;
+    if(i_note >= s->len){
+        stop_song(); uart_puts(">>> Cancion finalizada\r\n"); modo_teclado=1; return;
+    }
+    if(t_cnt==0) pwm_note((enum Note)s->nota_idx[i_note]);
+    t_cnt++;
+    if(t_cnt >= s->dur_ms[i_note]){
+        pwm_stop(); _delay_ms(20);
+        i_note++; t_cnt=0;
+    }
+}
+
