@@ -366,3 +366,22 @@ static int classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s
     }
     return best_i;
 }
+
+static void matrix_for_color(int cid){
+    switch(cid){
+        case C_VIOLETA:  ws_fill(180,  0,220); break;
+        case C_ROSADO:   ws_fill(255, 60,120); break;
+        case C_ROJO:     ws_fill(255,  0,  0); break;
+        case C_AMARILLO: ws_fill(255,180,  0); break;
+        default:         ws_off();             break;
+    }
+}
+static void servo_on_color_idx(int cid){
+    int target=-1;
+    if      (cid==C_VIOLETA)  target=  0;
+    else if (cid==C_ROSADO)   target= 60;
+    else if (cid==C_ROJO)     target=120;
+    else if (cid==C_AMARILLO) target=180;
+    else { ws_off(); return; }
+    if(target!=servoAngle){ servo_set_deg(target); matrix_for_color(cid); }
+}
