@@ -130,3 +130,52 @@ static char Teclado(void){
     }
     return 0;
 }
+
+// Pintado y rutina de pedir clave 
+static void pintar_ing(void){
+    twi_lcd_cmd(0xC0);
+    for(uint8_t i=0;i<LMAX;i++){
+        char c = (i<n_ing) ? (ver ? ing[i] : '*') : '_';
+        twi_lcd_dwr(c);
+        if(i<LMAX-1) twi_lcd_dwr(' ');
+    }
+    for(uint8_t k=11; k<16; k++) twi_lcd_dwr(' ');
+}
+ 
+static bool pedir_clave(const char *titulo){
+    n_ing=0; ver=0;
+    pant_pedir(titulo);
+    pintar_ing();
+ 
+    for(;;){
+        char t = Teclado();
+        if(!t){
+            if(ver){
+                while( (PIND & (F1|F2|F3|F4)) != (F1|F2|F3|F4) ){
+                    pintar_ing();
+                    _delay_ms(10);
+                }
+                ver=0; pintar_ing();
+            }
+            continue;
+        }
+ 
+        if(t==T_CER){ want_cerrar=1; return false; }   
+        if(t==T_MEN){ want_menu=1;   return false; } 
+        if(t==T_CAN){               return false; }  
+ 
+        if(t>='0' && t<='9'){
+            if(n_ing<LMAX){ ing[n_ing++]=t; pintar_ing(); }
+        }else if(t==T_BOR){
+            if(n_ing>0){ n_ing--; pintar_ing(); }
+        }else if(t=='*'){
+            ver=1; pintar_ing(); 
+        }else if(t==T_OK){
+            if(n_ing>=LMIN && n_ing<=LMAX) return true;
+            twi_lcd_cmd(0x80); twi_lcd_msg("Longitud 4-6");
+            _delay_ms(700);
+            twi_lcd_cmd(0x80); twi_lcd_msg(titulo);
+            pintar_ing();
+        }
+    }
+}
