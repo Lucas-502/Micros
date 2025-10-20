@@ -41,3 +41,34 @@ static uint8_t eer(uint16_t a){
     while (EECR & (1<<EEPE));
     EEAR=a; EECR |= (1<<EERE); return EEDR;
 }
+
+/ Mapa de teclado y buffers de ingreso
+// Teclas simbólicas
+#define T_OK   'A'  // Aceptar  
+#define T_BOR  'B'  // Borrar   
+#define T_CAN  'C'  // Cancelar 
+#define T_CER  'R'  // Cerrar   
+#define T_MEN  'M'  // Menu (a la derecha del cero)
+ 
+// Parámetros de longitud y reintentos
+#define LMIN 4
+#define LMAX 6
+#define MAXI 3
+ 
+// Disposición de teclas (col x fila)
+static const char teclas[4][4] = {
+     { '1','4','7','*' },           // C1
+     { '2','5','8','0' },           // C2
+     { '3','6','9',T_MEN },         // C3
+     { T_OK, T_BOR, T_CAN, T_CER }  // C4
+};
+ 
+static const uint8_t b[4] = { C1, C2, C3, C4 };
+static const uint8_t f[4] = { F1, F2, F3, F4 };
+ 
+// Buffers de ingreso
+static char ing[LMAX];
+static uint8_t n_ing=0;
+static uint8_t ver=0;                
+static volatile uint8_t want_cerrar=0;
+static volatile uint8_t want_menu=0;
