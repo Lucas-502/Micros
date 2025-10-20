@@ -100,3 +100,36 @@ static void ejecutar_compacto_escalado(const uint8_t* data, uint16_t nbytes,
         }
     }
 }
+
+void bajar_lapiz(void){
+	PORTD |=  LAPIZAR;
+	PORTD &= ~LAPIZAB;
+}
+void subir_lapiz(void){
+	PORTD |=  LAPIZAB;
+	PORTD &= ~LAPIZAR;
+}
+void arriba(uint16_t t){
+	PORTD |=  ABB;
+	PORTD &= ~ARR;
+	Timer(t);
+	PORTD |=  ARR;
+}
+void abajo(uint16_t t){
+	PORTD |=  ARR;
+	PORTD &= ~ABB;
+	Timer(t);
+	PORTD |=  ABB;
+}
+void izquierda(uint16_t t){
+	PORTD |=  DER;
+	PORTD &= ~IZQ;
+	Timer(t);
+	PORTD |=  IZQ;
+}
+void derecha(uint16_t t){
+	PORTD |=  IZQ;
+	PORTD &= ~DER;
+	Timer(t);
+	PORTD |=  DER;
+}
