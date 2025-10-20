@@ -73,3 +73,36 @@ static uint8_t nota_estable(void){
     return 0xFE;
 }
 
+/* ============== Canciones ============== */
+#define MAX_NOTAS 96
+typedef struct{
+    uint8_t  nota_idx[MAX_NOTAS];
+    uint16_t dur_ms [MAX_NOTAS];
+    uint16_t len;
+} Cancion;
+
+static Cancion song1, song2;
+static uint8_t reproduciendo=0; /* 0=ninguna, 1=song1, 2=song2 */
+static uint16_t i_note=0, t_cnt=0;
+static uint8_t modo_teclado=1;
+
+/* Auxiliar de líneas para construir canciones */
+typedef struct { const uint8_t *n; const uint8_t *d; uint16_t len; } Line;
+
+/* --- Parte A (tu IMAGEN 1) --- */
+static const uint8_t A1_note[] = { F5, A5, B5 };
+static const uint8_t A1_dur[]  = { 4,  4,  7  };
+static const uint8_t A2_note[] = { F5, A5, B5 };
+static const uint8_t A2_dur[]  = { 4,  4,  7  };
+static const uint8_t A3_note[] = { F5, A5, B5, E6, D6 };
+static const uint8_t A3_dur[]  = { 4,  4,  5,  4,  9  };
+static const uint8_t A4_note[] = { B5, C6, B5, G5, E5 };
+static const uint8_t A4_dur[]  = { 4,  5,  4,  4,  10 };
+static const uint8_t A5_note[] = { D5, E5, G5, E5 };
+static const uint8_t A5_dur[]  = { 4,  4,  4,  8 };
+static const Line LINES_A[] = {
+  {A1_note,A1_dur,sizeof(A1_note)}, {A2_note,A2_dur,sizeof(A2_note)},
+  {A3_note,A3_dur,sizeof(A3_note)}, {A4_note,A4_dur,sizeof(A4_note)},
+  {A5_note,A5_dur,sizeof(A5_note)}
+};
+
