@@ -168,3 +168,68 @@ static uint16_t adc_read_once(uint8_t ch){
 }
 
 
+// PWM RGB
+static void rgb_pwm_init(void){
+    DDRD |= (1<<PIN_R)|(1<<PIN_G)|(1<<PIN_B);
+    TCCR0A = (1<<COM0A1)|(1<<COM0B1)|(1<<WGM01)|(1<<WGM00);
+    TCCR0B = (1<<CS01)|(1<<CS00);
+    TCCR2A = (1<<COM2B1)|(1<<WGM21)|(1<<WGM20);
+    TCCR2B = (1<<CS22);
+    OCR0A=0; OCR0B=0; OCR2B=0;
+}
+static inline void rgb_set_raw(uint8_t r,uint8_t g,uint8_t b){
+    OCR2B = RGB_COMMON_ANODE? (255-r) : r;
+    OCR0B = RGB_COMMON_ANODE? (255-g) : g;
+    OCR0A = RGB_COMMON_ANODE? (255-b) : b;
+}
+static inline void rgb_off(void){ rgb_set_raw(0,0,0); }
+static inline void rgb_set(uint8_t r,uint8_t g,uint8_t b){
+    rgb_set_raw(r?levR:0, g?levG:0, b?levB:0);
+}
+
+// SERVO (Timer1)
+static void servo_init(void){
+    DDRB  |= (1<<PIN_SERVO);
+    TCCR1A = (1<<COM1A1)|(1<<WGM11);
+    TCCR1B = (1<<WGM13)|(1<<WGM12)|(1<<CS11); // presc=8, TOP=ICR1
+    ICR1   = 39999;                            // 20 ms -> 40000 ticks @0.5us
+}
+static inline uint16_t us_to_ocr(uint16_t us){ if(us<400)us=400; if(us>2600)us=2600; return (uint16_t)(us*2); }
+static void servo_write_us(uint16_t us){ OCR1A = us_to_ocr(us); }
+static void servo_set_deg(int a){
+    if(a<0)a=0; if(a>180)a=180;
+    if(a!=servoAngle){ servoAngle=a;
+        uint32_t span = (uint32_t)(SERVO_MAX_US - SERVO_MIN_US);
+        uint16_t us = SERVO_MIN_US + (uint16_t)(span * (uint32_t)a / 180UL);
+        servo_write_us(us);
+    }
+}
+
+// WS2812 — bit-bang @16 MHz
+static inline void ws_pin_high(void){ PORTD |=  (1<<PIN_WS_BIT); }
+static inline void ws_pin_low (void){ PORTD &= ~(1<<PIN_WS_BIT); }
+
+static inline void ws_send_bit_1(void){
+    ws_pin_high();  __builtin_avr_delay_cycles(10);  // ~0.625us + sbi
+    ws_pin_low();   __builtin_avr_delay_cycles(8);   // ~0.5us + cbi
+}
+static inline void ws_send_bit_0(void){
+    ws_pin_high();  __builtin_avr_delay_cycles(4);   // ~0.25us + sbi
+    ws_pin_low();   __builtin_avr_delay_cycles(12);  // ~0.75us + cbi
+}
+static inline void ws_send_byte(uint8_t b){ // MSB primero, WS = GRB
+    for(uint8_t i=0;i<8;i++){
+        if(b & 0x80) ws_send_bit_1(); else ws_send_bit_0();
+        b <<= 1;
+    }
+}
+static void ws_show_GRB(uint8_t g,uint8_t r,uint8_t b){
+    cli();
+    for(uint16_t i=0;i<WS_COUNT;i++){
+        ws_send_byte(g); ws_send_byte(r); ws_send_byte(b);
+    }
+    sei();
+    _delay_us(60);
+}
+static inline void ws_off(void){ ws_show_GRB(0,0,0); }
+static inline void ws_fill(uint8_t R,uint8_t G,uint8_t B){ ws_show_GRB(G,R,B); }
