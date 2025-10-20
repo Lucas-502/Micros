@@ -124,4 +124,24 @@ static const Line LINES_B[] = {
 #define TOTAL_MS_A 6000
 #define TOTAL_MS_B 6000
 
+// Cancion 2
 
+static const uint8_t C1_note[] = { B5,B5,B5 };
+static const uint8_t C1_dur[]  = { 3, 3, 6 };
+static const uint8_t C2_note[] = { D6,C6,B5,B5,B5 };
+static const uint8_t C2_dur[]  = { 2, 2, 3, 3, 6 };
+static const uint8_t C3_note[] = { D6,C6,B5,B5,B5 };
+static const uint8_t C3_dur[]  = { 2, 2, 3, 3, 6 };
+static const uint8_t C4_note[] = { D6,C6 };
+static const uint8_t C4_dur[]  = { 6, 6 };
+static const uint8_t C5_note[] = { B5,B5,E5,B5 };
+static const uint8_t C5_dur[]  = { 3, 3, 6, 6 };
+static const uint8_t C6_note[] = { E5,B5 };
+static const uint8_t C6_dur[]  = { 8, 8 };
+
+static const Line LINES_C[] = {
+  {C1_note,C1_dur,sizeof(C1_note)}, {C2_note,C2_dur,sizeof(C2_note)},
+  {C3_note,C3_dur,sizeof(C3_note)}, {C4_note,C4_dur,sizeof(C4_note)},
+  {C5_note,C5_dur,sizeof(C5_note)}, {C6_note,C6_dur,sizeof(C6_note)}
+};
+#define TOTAL_MS_C 7000
