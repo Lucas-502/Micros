@@ -318,3 +318,51 @@ static void led_balance_calibrate(void){
                 r0,g0,b0, levR,levG,levB);
 }
 
+static void recompute_centers(void){
+    for(uint8_t i=0;i<3;i++){
+        if(prim_ok[i]){
+            uint16_t h; uint8_t s;
+            hue_sat_from_rgb8(prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], &h,&s);
+            prim_hue[i]=h; center_hue[i]=h; center_en[i]=1;
+        }else center_en[i]=0;
+    }
+    if(prim_ok[0]&&prim_ok[1]&&prim_ok[2]){
+        uint16_t Hy = circ_mid(prim_hue[IDX_R], prim_hue[IDX_G]);
+        uint16_t Hc = circ_mid(prim_hue[IDX_G], prim_hue[IDX_B]);
+        uint16_t Hv = circ_mid(prim_hue[IDX_B], prim_hue[IDX_R]);
+        center_hue[C_AMARILLO]=Hy; center_en[C_AMARILLO]=1;
+        center_hue[C_CELESTE ]=Hc; center_en[C_CELESTE ]=1;
+        center_hue[C_VIOLETA ]=Hv; center_en[C_VIOLETA ]=1;
+        center_hue[C_NARANJA ]=circ_mid(prim_hue[IDX_R], Hy); center_en[C_NARANJA ]=1;
+        center_hue[C_ROSADO  ]=circ_mid(prim_hue[IDX_R], Hv); center_en[C_ROSADO  ]=1;
+    }else{
+        center_en[C_AMARILLO]=center_en[C_CELESTE]=center_en[C_VIOLETA]=0;
+        center_en[C_NARANJA]=center_en[C_ROSADO]=0;
+    }
+}
+static void calibrate_primary(uint8_t idx){
+    uint16_t raw0[3]; measure_triplet_u16(raw0);
+    uint16_t raw[3];  apply_white_balance(raw0, raw);
+    uint8_t  chr[3];  chroma8_from_u16(raw, chr);
+    prim_chr[idx][0]=chr[0]; prim_chr[idx][1]=chr[1]; prim_chr[idx][2]=chr[2]; prim_ok[idx]=1;
+    uint16_t h; uint8_t s; hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h,&s); prim_hue[idx]=h;
+    recompute_centers();
+    const char* nm=(idx==0?"ROJO":(idx==1?"VERDE":"AZUL"));
+    uart_printf("Ref %s RAW R:%u G:%u B:%u | NORM r:%u g:%u b:%u | H=%u S=%u\r\n> ",
+                nm, raw[0],raw[1],raw[2], chr[0],chr[1],chr[2], h, s);
+}
+static int classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s_out){
+    uint16_t raw[3]; apply_white_balance(raw_meas0, raw);
+    uint8_t chr[3]; if(!chroma8_from_u16(raw, chr)) return -2;
+    uint16_t h; uint8_t s; if(!hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h,&s)) return -1;
+    if(s<SAT_MIN) return -1;
+    if(h_out)*h_out=h; if(s_out)*s_out=s;
+    uint16_t best_d=1000; int8_t best_i=-3;
+    for(uint8_t i=0;i<C_COUNT;i++){
+        if(!center_en[i]) continue;
+        uint16_t d=circ_dist(h,center_hue[i]);
+        uint16_t tol=(i<=C_AZUL)?TOL_H_PRIM_DEG:TOL_H_SEC_DEG;
+        if(d<best_d && d<=tol){ best_d=d; best_i=i; }
+    }
+    return best_i;
+}
