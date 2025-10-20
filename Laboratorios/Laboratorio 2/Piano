@@ -145,3 +145,12 @@ static const Line LINES_C[] = {
   {C5_note,C5_dur,sizeof(C5_note)}, {C6_note,C6_dur,sizeof(C6_note)}
 };
 #define TOTAL_MS_C 7000
+
+/* === helpers de tiempo compartidos === */
+static uint32_t sum_units(const Line *L, uint8_t n){
+    uint32_t s=0; for(uint8_t i=0;i<n;i++) for(uint16_t j=0;j<L[i].len;j++) s+=L[i].d[j]; return s;
+}
+static uint16_t tick_ms_for(uint32_t total_ms, const Line *L, uint8_t n){
+    uint32_t T=sum_units(L,n); if(!T) T=1;
+    return (uint16_t)((total_ms + T/2)/T); /* redondeo */
+}
