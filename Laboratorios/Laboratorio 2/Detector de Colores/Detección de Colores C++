@@ -1,1 +1,537 @@
+#include <Arduino.h>
+#include <Servo.h>
+#include <Adafruit_NeoPixel.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+/* ======= HARDWARE ======= */
+const uint8_t PIN_LDR   = A0;  // LDR en A0 (ADC0)
+const uint8_t PIN_R     = 3;   // D3  (Timer2 PWM)  -> ROJO del LED discreto
+const uint8_t PIN_G     = 5;   // D5  (Timer0 PWM)  -> VERDE
+const uint8_t PIN_B     = 6;   // D6  (Timer0 PWM)  -> AZUL
+const uint8_t PIN_SERVO = 9;   // Servo SG90 en D9 (Timer1 + Servo.h)
+const uint8_t PIN_WS    = 4;   // DIN de WS2812 (usar 330–470 Ω en serie recomendado)
+
+/* ======= SERVO ======= */
+#define SERVO_MIN_US  500
+#define SERVO_MAX_US  2400
+Servo servo;
+static int  servoAngle = 90;
+static bool servoAuto  = true;   // modo automático ON/OFF
+
+/* ======= WS2812 ======= */
+#define WS_COUNT 64
+Adafruit_NeoPixel strip(WS_COUNT, PIN_WS, NEO_GRB + NEO_KHZ800);
+uint8_t wsBrightness = 30;
+static inline void ws_off(){ for(uint16_t i=0;i<WS_COUNT;i++) strip.setPixelColor(i,0); strip.show(); }
+static inline void ws_fill(uint8_t R,uint8_t G,uint8_t B){
+  for(uint16_t i=0;i<WS_COUNT;i++) strip.setPixelColor(i, strip.Color(R,G,B));
+  strip.show();
+}
+
+/* ======= LED RGB discreto ======= */
+#define RGB_COMMON_ANODE  0     // 0=cátodo común, 1=ánodo común
+static inline uint8_t  lvl(uint8_t x){ return RGB_COMMON_ANODE ? (255-x) : x; }
+static inline void     rgbSetRaw(uint8_t r,uint8_t g,uint8_t b){
+  analogWrite(PIN_R, lvl(r));
+  analogWrite(PIN_G, lvl(g));
+  analogWrite(PIN_B, lvl(b));
+}
+static inline void     rgbOff(){ rgbSetRaw(0,0,0); }
+
+/* === Balance de niveles por canal (para igualar LED discreto) === */
+uint8_t levR=255, levG=255, levB=255;
+uint8_t RGB_LEVEL = 255;
+static inline void rgbSet(uint8_t r,uint8_t g,uint8_t b){
+  rgbSetRaw(r?levR:0, g?levG:0, b?levB:0);
+}
+
+/* ======= MUESTREO / ADC ======= */
+#define SAMPLES_PER_COLOR  20
+#define SAMPLE_DELAY_MS     2
+#define SAMPLES_AMBIENT    10
+#define MIN_SUM_ADC        30u
+static inline uint16_t sub_sat(uint16_t a, uint16_t b){ return (a>b)?(uint16_t)(a-b):0; }
+
+static uint16_t ambientAvg(){
+  rgbOff(); delay(3);
+  uint32_t acc=0;
+  for(uint8_t i=0;i<SAMPLES_AMBIENT;i++){
+    acc += analogRead(PIN_LDR);
+    delay(SAMPLE_DELAY_MS);
+  }
+  return (uint16_t)(acc/SAMPLES_AMBIENT);
+}
+static uint16_t measureColor(uint8_t r,uint8_t g,uint8_t b){
+  rgbSet(r?RGB_LEVEL:0, g?RGB_LEVEL:0, b?RGB_LEVEL:0);
+  delay(5);
+  uint32_t acc=0;
+  for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){
+    acc += analogRead(PIN_LDR);
+    delay(SAMPLE_DELAY_MS);
+  }
+  rgbOff();
+  return (uint16_t)(acc/SAMPLES_PER_COLOR);
+}
+static void measureTripletU16(uint16_t m[3]){
+  uint16_t amb = ambientAvg();
+  uint16_t R   = measureColor(1,0,0);
+  uint16_t G   = measureColor(0,1,0);
+  uint16_t B   = measureColor(0,0,1);
+  m[0]=sub_sat(R,amb); m[1]=sub_sat(G,amb); m[2]=sub_sat(B,amb);
+}
+
+/* ======= Cromaticidad / Hue ======= */
+#define SAT_MIN          28u
+#define TOL_H_PRIM_DEG   28u
+#define TOL_H_SEC_DEG    36u
+
+static uint8_t chroma8_from_u16(const uint16_t in[3], uint8_t out[3]){
+  uint32_t s = (uint32_t)in[0] + in[1] + in[2];
+  if(s < MIN_SUM_ADC){ out[0]=out[1]=out[2]=0; return 0; }
+  out[0] = (uint8_t)((in[0]*255UL)/s);
+  out[1] = (uint8_t)((in[1]*255UL)/s);
+  out[2] = (uint8_t)((in[2]*255UL)/s);
+  return 1;
+}
+static uint8_t hue_sat_from_rgb8(uint8_t r, uint8_t g, uint8_t b, uint16_t* hue_deg, uint8_t* sat){
+  uint8_t max=r; if(g>max) max=g; if(b>max) max=b;
+  uint8_t min=r; if(g<min) min=g; if(b<min) min=b;
+  uint8_t delta = max - min;
+  if(max==0){ *sat=0; *hue_deg=0; return 0; }
+  *sat = (uint8_t)(((uint16_t)delta*255U)/max);
+  if(delta==0){ *hue_deg=0; return 0; }
+  int32_t h;
+  if(max==r)      h =   0 + 60*(int32_t)((int16_t)g-(int16_t)b)/delta;
+  else if(max==g) h = 120 + 60*(int32_t)((int16_t)b-(int16_t)r)/delta;
+  else            h = 240 + 60*(int32_t)((int16_t)r-(int16_t)g)/delta;
+  while(h<0) h+=360; while(h>=360) h-=360;
+  *hue_deg = (uint16_t)h;
+  return 1;
+}
+static inline uint16_t circ_mid(uint16_t a, uint16_t b){
+  int16_t d = (int16_t)b - (int16_t)a;
+  while(d<-180) d+=360; while(d>180) d-=360;
+  int16_t m = (int16_t)a + d/2;
+  while(m<0) m+=360; while(m>=360) m-=360;
+  return (uint16_t)m;
+}
+static inline uint16_t circ_dist(uint16_t a, uint16_t b){
+  int16_t d = (int16_t)a - (int16_t)b;
+  while(d<-180) d+=360; while(d>180) d-=360;
+  if(d<0) d=-d;
+  return (uint16_t)d;
+}
+
+/* ======= White Balance (WB) ======= */
+static uint16_t wb_ref[3]={0,0,0};
+static uint8_t  wb_ok=0;
+
+static void apply_white_balance(const uint16_t in[3], uint16_t out[3]){
+  if(!wb_ok){ out[0]=in[0]; out[1]=in[1]; out[2]=in[2]; return; }
+  uint32_t s = (uint32_t)wb_ref[0] + wb_ref[1] + wb_ref[2];
+  if(s==0){ out[0]=in[0]; out[1]=in[1]; out[2]=in[2]; return; }
+  uint32_t tgt = s/3;
+  for(uint8_t i=0;i<3;i++){
+    uint32_t den = wb_ref[i]?wb_ref[i]:1;
+    uint32_t v   = (uint32_t)in[i] * tgt / den;
+    if(v>65535U) v=65535U;
+    out[i]=(uint16_t)v;
+  }
+}
+static void wb_calibrate(){
+  uint16_t raw[3]; measureTripletU16(raw);
+  wb_ref[0]=raw[0]; wb_ref[1]=raw[1]; wb_ref[2]=raw[2];
+  wb_ok=1;
+  Serial.print(F("WB blanco RAW: R=")); Serial.print(wb_ref[0]);
+  Serial.print(F(" G=")); Serial.print(wb_ref[1]);
+  Serial.print(F(" B=")); Serial.print(wb_ref[2]); Serial.println(F("\r\n> "));
+}
+
+/* ======= LED Balance (niveles por canal) ======= */
+static uint8_t gain_from_pair(uint16_t x, uint16_t tgt){
+  if(x==0) return 255;
+  uint32_t v = (uint32_t)RGB_LEVEL * tgt / x;
+  if(v>255) v=255;
+  return (uint8_t)v;
+}
+static void led_balance_calibrate(){
+  uint16_t amb = ambientAvg();
+  rgbSetRaw(255,0,0); delay(5); uint32_t aR=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aR+=analogRead(PIN_LDR); delay(SAMPLE_DELAY_MS);} rgbOff();
+  rgbSetRaw(0,255,0); delay(5); uint32_t aG=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aG+=analogRead(PIN_LDR); delay(SAMPLE_DELAY_MS);} rgbOff();
+  rgbSetRaw(0,0,255); delay(5); uint32_t aB=0; for(uint8_t i=0;i<SAMPLES_PER_COLOR;i++){ aB+=analogRead(PIN_LDR); delay(SAMPLE_DELAY_MS);} rgbOff();
+
+  uint16_t r0 = sub_sat((uint16_t)(aR/SAMPLES_PER_COLOR), amb);
+  uint16_t g0 = sub_sat((uint16_t)(aG/SAMPLES_PER_COLOR), amb);
+  uint16_t b0 = sub_sat((uint16_t)(aB/SAMPLES_PER_COLOR), amb);
+
+  uint32_t s = (uint32_t)r0 + g0 + b0; if(s<3){ Serial.println(F("LED balance: poca luz\r\n> ")); return; }
+  uint16_t tgt = (uint16_t)(s/3);
+
+  levR = gain_from_pair(r0, tgt);
+  levG = gain_from_pair(g0, tgt);
+  levB = gain_from_pair(b0, tgt);
+
+  Serial.print(F("LED balance: rawW R=")); Serial.print(r0);
+  Serial.print(F(" G=")); Serial.print(g0);
+  Serial.print(F(" B=")); Serial.print(b0);
+  Serial.print(F(" -> levR=")); Serial.print(levR);
+  Serial.print(F(" levG=")); Serial.print(levG);
+  Serial.print(F(" levB=")); Serial.print(levB);
+  Serial.println(F("\r\n> "));
+}
+
+/* ======= PRIMARIOS y CENTROS ======= */
+enum { IDX_R=0, IDX_G=1, IDX_B=2 };
+
+enum {
+  C_ROJO=0, C_VERDE, C_AZUL,
+  C_AMARILLO, C_NARANJA, C_VIOLETA, C_CELESTE, C_ROSADO,
+  C_COUNT
+};
+static const char* CNAME[C_COUNT] = {
+  "ROJO","VERDE","AZUL","AMARILLO","NARANJA","VIOLETA","CELESTE","ROSADO"
+};
+
+/* PERFIL por defecto (tus valores buenos) */
+#define USE_DEFAULT_PROFILE  1
+static const uint16_t DEFAULT_WB[3] = {337, 237, 422};
+static const uint8_t  DEFAULT_LEV_R = 179;
+static const uint8_t  DEFAULT_LEV_G = 255;
+static const uint8_t  DEFAULT_LEV_B = 143;
+static const uint8_t  DEFAULT_PRIM_CHR[3][3] = {
+  {66,128, 60},   // ROJO
+  {57, 86,110},   // VERDE
+  {101,75, 77}    // AZUL
+};
+static const uint16_t DEFAULT_CENTER_HUE[C_COUNT] =
+  {115, 208, 356, 161, 138, 55, 282, 85};
+
+static uint8_t  prim_ok[3]   = {0,0,0};
+static uint8_t  prim_chr[3][3];
+static uint16_t prim_hue[3];
+static uint16_t center_hue[C_COUNT];
+static uint8_t  center_en[C_COUNT];
+
+static void recompute_centers(){
+  for(uint8_t i=0;i<3;i++){
+    if(prim_ok[i]){
+      uint16_t h; uint8_t s;
+      hue_sat_from_rgb8(prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], &h, &s);
+      prim_hue[i]=h; center_hue[i]=h; center_en[i]=1;
+    }else{
+      center_en[i]=0;
+    }
+  }
+  if(prim_ok[0] && prim_ok[1] && prim_ok[2]){
+    uint16_t Hy = circ_mid(prim_hue[IDX_R], prim_hue[IDX_G]); // amarillo
+    uint16_t Hc = circ_mid(prim_hue[IDX_G], prim_hue[IDX_B]); // celeste
+    uint16_t Hv = circ_mid(prim_hue[IDX_B], prim_hue[IDX_R]); // violeta
+    center_hue[C_AMARILLO]=Hy; center_en[C_AMARILLO]=1;
+    center_hue[C_CELESTE ]=Hc; center_en[C_CELESTE ]=1;
+    center_hue[C_VIOLETA ]=Hv; center_en[C_VIOLETA ]=1;
+    center_hue[C_NARANJA ]=circ_mid(prim_hue[IDX_R], Hy); center_en[C_NARANJA ]=1;
+    center_hue[C_ROSADO  ]=circ_mid(prim_hue[IDX_R], Hv); center_en[C_ROSADO  ]=1;
+  }else{
+    center_en[C_AMARILLO]=center_en[C_CELESTE]=center_en[C_VIOLETA]=0;
+    center_en[C_NARANJA]=center_en[C_ROSADO]=0;
+  }
+}
+static void calibrate_primary(uint8_t idx){
+  uint16_t raw0[3]; measureTripletU16(raw0);
+  uint16_t raw[3];  apply_white_balance(raw0, raw);
+  uint8_t  chr[3];  chroma8_from_u16(raw, chr);
+  prim_chr[idx][0]=chr[0]; prim_chr[idx][1]=chr[1]; prim_chr[idx][2]=chr[2];
+  prim_ok[idx]=1;
+  uint16_t h; uint8_t s; hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h, &s);
+  prim_hue[idx]=h; recompute_centers();
+  const char* nm = (idx==0?"ROJO":(idx==1?"VERDE":"AZUL"));
+  Serial.print(F("Ref ")); Serial.print(nm);
+  Serial.print(F(" RAW R:")); Serial.print(raw[0]);
+  Serial.print(F(" G:")); Serial.print(raw[1]);
+  Serial.print(F(" B:")); Serial.print(raw[2]);
+  Serial.print(F(" | NORM r:")); Serial.print(chr[0]);
+  Serial.print(F(" g:")); Serial.print(chr[1]);
+  Serial.print(F(" b:")); Serial.print(chr[2]);
+  Serial.print(F(" | H=")); Serial.print(h);
+  Serial.print(F(" S=")); Serial.print(s);
+  Serial.println(F("\r\n> "));
+}
+
+/* ======= Clasificación por HUE ======= */
+static int classify_hue(const uint16_t raw_meas0[3], uint16_t* h_out, uint8_t* s_out){
+  uint16_t raw[3]; apply_white_balance(raw_meas0, raw);
+  uint8_t chr[3];
+  if(!chroma8_from_u16(raw, chr)) return -2; // poca luz
+  uint16_t h; uint8_t s;
+  if(!hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h, &s)) return -1; // baja sat
+  if(s < SAT_MIN) return -1;
+  if(h_out) *h_out=h; if(s_out) *s_out=s;
+
+  uint16_t best_d = 1000; int8_t best_i = -3;
+  for(uint8_t i=0;i<C_COUNT;i++){
+    if(!center_en[i]) continue;
+    uint16_t d = circ_dist(h, center_hue[i]);
+    uint16_t tol = (i<=C_AZUL) ? TOL_H_PRIM_DEG : TOL_H_SEC_DEG;
+    if(d < best_d && d <= tol){ best_d = d; best_i = i; }
+  }
+  return best_i;
+}
+
+/* ======= Debug distancias ======= */
+static void debug_distances(const uint16_t raw0[3]){
+  uint16_t raw[3]; apply_white_balance(raw0, raw);
+  uint8_t chr[3];
+  if(!chroma8_from_u16(raw, chr)){ Serial.println(F("POCA_LUZ")); return; }
+  uint16_t h; uint8_t s; hue_sat_from_rgb8(chr[0],chr[1],chr[2], &h, &s);
+  Serial.print(F("NORM=(")); Serial.print(chr[0]); Serial.print(',');
+  Serial.print(chr[1]); Serial.print(','); Serial.print(chr[2]);
+  Serial.print(F(") H=")); Serial.print(h); Serial.print(F(" S=")); Serial.println(s);
+  for(uint8_t i=0;i<C_COUNT;i++){
+    if(!center_en[i]) continue;
+    uint16_t d = circ_dist(h, center_hue[i]);
+    uint16_t tol = (i<=C_AZUL) ? TOL_H_PRIM_DEG : TOL_H_SEC_DEG;
+    Serial.print(' '); Serial.print(CNAME[i]);
+    Serial.print(F(": Hc=")); Serial.print(center_hue[i]);
+    Serial.print(F("  d=")); Serial.print(d);
+    Serial.print(F("  ")); Serial.println((d<=tol)?"<--":"");
+  }
+}
+
+/* ======= Perfil por defecto ======= */
+static void load_defaults(){
+  // LED levels
+  levR = DEFAULT_LEV_R; levG = DEFAULT_LEV_G; levB = DEFAULT_LEV_B;
+
+  // WB
+  wb_ref[0]=DEFAULT_WB[0]; wb_ref[1]=DEFAULT_WB[1]; wb_ref[2]=DEFAULT_WB[2];
+  wb_ok=1;
+
+  // Primarios normalizados
+  for(uint8_t i=0;i<3;i++){
+    prim_chr[i][0]=DEFAULT_PRIM_CHR[i][0];
+    prim_chr[i][1]=DEFAULT_PRIM_CHR[i][1];
+    prim_chr[i][2]=DEFAULT_PRIM_CHR[i][2];
+    prim_ok[i]=1;
+  }
+
+  // Centros fijos (los tuyos)
+  for(uint8_t i=0;i<C_COUNT;i++){
+    center_hue[i]=DEFAULT_CENTER_HUE[i];
+    center_en[i]=1;
+  }
+
+  Serial.println(F("[Perfil por defecto CARGADO]"));
+  Serial.print(F("LEV: R=")); Serial.print(levR);
+  Serial.print(F(" G=")); Serial.print(levG);
+  Serial.print(F(" B=")); Serial.print(levB);
+  Serial.print(F(" | WB: ")); Serial.print(wb_ref[0]); Serial.print(',');
+  Serial.print(wb_ref[1]); Serial.print(','); Serial.print(wb_ref[2]);
+  Serial.println(F("\r\n> "));
+}
+
+/* ======= Servo + Matriz (enciende SOLO si el servo se mueve a 0/60/120/180) ======= */
+static inline void servo_set_deg(int a){
+  if(a<0) a=0; if(a>180) a=180;
+  if(a!=servoAngle){ servoAngle=a; servo.write(a); }
+}
+
+/* mapa pedido: 0° violeta, 60° rosado, 120° rojo, 180° amarillo */
+static void matrix_for_color(int cid){
+  switch(cid){
+    case C_VIOLETA:  ws_fill(180,  0,220); break;
+    case C_ROSADO:   ws_fill(255, 60,120); break;
+    case C_ROJO:     ws_fill(255,  0,  0); break;
+    case C_AMARILLO: ws_fill(255,180,  0); break;
+    default:         ws_off();             break;
+  }
+}
+/* mover servo según color; actualizar matriz SOLO si hubo movimiento y SOLO 4 colores */
+static void servo_on_color_idx(int cid){
+  int target=-1;
+  if      (cid==C_VIOLETA)  target=  0;
+  else if (cid==C_ROSADO)   target= 60;
+  else if (cid==C_ROJO)     target=120;
+  else if (cid==C_AMARILLO) target=180;
+  else { ws_off(); return; } // no mapeado -> matriz apagada
+
+  if(target!=servoAngle){
+    servo_set_deg(target);   // se movió
+    matrix_for_color(cid);   // ahora sí: encender matriz
+  }
+  // Si no cambió el ángulo: NO tocamos la matriz (queda como estaba)
+}
+
+/* ======= Histeresis simple para servo AUTO ======= */
+static int      lastIdx = -1;
+static uint8_t  stable  = 0;
+#define STABLE_N  2   // mover cuando repite >=2 veces seguidas
+
+/* ======= Utils ======= */
+static void s_printf(const char *fmt, ...) {
+  char buf[160];
+  va_list ap; va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  Serial.print(buf);
+}
+
+/* ======= UI ======= */
+static void print_menu(){
+  Serial.println(F("\r\n===== MENU ====="));
+  Serial.println(F(" 1/2/3) Calibrar ROJO/VERDE/AZUL"));
+  Serial.println(F(" L) LED balance  |  w) White balance"));
+  Serial.println(F(" m) Medir+clasif |  d) Debug distancias"));
+  Serial.println(F(" h) Mostrar centros  |  s) Mostrar primarios"));
+  Serial.println(F(" z) Cargar perfil por defecto"));
+  Serial.println(F(" j) Test RGB (R,G,B)"));
+  Serial.println(F(" u) Servo AUTO on/off | A/B/C/D/E = 0/45/90/135/180 | p) ángulo"));
+  Serial.println(F(" x) Borrar calibraciones"));
+  Serial.print(F("> "));
+}
+static void show_rgb_refs(){
+  Serial.println(F("\r\n--- PRIMARIOS (r,g,b en 0..255; H,S) ---"));
+  for(uint8_t i=0;i<3;i++){
+    const char* nm = (i==0?"ROJO":(i==1?"VERDE":"AZUL"));
+    if(prim_ok[i]){
+      uint16_t h; uint8_t s;
+      hue_sat_from_rgb8(prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], &h, &s);
+      s_printf("%-5s: r=%3u g=%3u b=%3u | H=%3u S=%3u\r\n",
+               nm, prim_chr[i][0],prim_chr[i][1],prim_chr[i][2], h, s);
+    }else{
+      s_printf("%-5s: (sin calibrar)\r\n", nm);
+    }
+  }
+  s_printf("LEV: R=%u G=%u B=%u | WB:%s | Servo:%s @%d°\r\n> ",
+           levR,levG,levB, wb_ok?"OK":"NO", servoAuto?"AUTO":"MAN", servoAngle);
+}
+static void show_centers(){
+  Serial.println(F("\r\n--- CENTROS (H en grados) ---"));
+  for(uint8_t i=0;i<C_COUNT;i++){
+    Serial.print(CNAME[i]); Serial.print(F(": "));
+    if(center_en[i]) { s_printf("H=%u\r\n", center_hue[i]); }
+    else             { Serial.println(F("(deshabilitado)")); }
+  }
+  Serial.print(F("> "));
+}
+
+/* ======= Arduino ======= */
+void setup(){
+  pinMode(PIN_R, OUTPUT);
+  pinMode(PIN_G, OUTPUT);
+  pinMode(PIN_B, OUTPUT);
+  rgbOff();
+  analogReference(DEFAULT);     // AVcc
+
+  strip.begin(); strip.setBrightness(wsBrightness); ws_off();
+
+  servo.attach(PIN_SERVO, SERVO_MIN_US, SERVO_MAX_US);
+  servo_on_color_idx(C_ROSADO); // arranque: por ejemplo rosado 60°
+  servoAuto = true;
+
+  Serial.begin(9600);
+  while(!Serial) {;}
+  Serial.println(F("\r\n=== LDR+RGB por HUE + LED/WB + Perfil + SERVO + WS ==="));
+
+  #if USE_DEFAULT_PROFILE
+    // cargar perfil por defecto (WB, niveles LED, centros)
+    levR=DEFAULT_LEV_R; levG=DEFAULT_LEV_G; levB=DEFAULT_LEV_B;
+    wb_ref[0]=DEFAULT_WB[0]; wb_ref[1]=DEFAULT_WB[1]; wb_ref[2]=DEFAULT_WB[2]; wb_ok=1;
+    for(uint8_t i=0;i<3;i++){ prim_chr[i][0]=DEFAULT_PRIM_CHR[i][0]; prim_chr[i][1]=DEFAULT_PRIM_CHR[i][1]; prim_chr[i][2]=DEFAULT_PRIM_CHR[i][2]; prim_ok[i]=1; }
+    for(uint8_t i=0;i<C_COUNT;i++){ center_hue[i]=DEFAULT_CENTER_HUE[i]; center_en[i]=1; }
+    Serial.println(F("[Perfil por defecto CARGADO]"));
+  #endif
+
+  print_menu();
+}
+
+void loop(){
+  if(!Serial.available()) return;
+  char ch = Serial.read();
+  if(ch=='\r'||ch=='\n'||ch==' ') { return; }
+
+  if(ch=='j'||ch=='J'){ // test R,G,B (LED discreto)
+    Serial.println(F("\r\nTest RGB (0.6 s): R, G, B"));
+    rgbSetRaw(255,0,0); delay(600);
+    rgbSetRaw(0,255,0); delay(600);
+    rgbSetRaw(0,0,255); delay(600);
+    rgbOff(); Serial.print(F("> "));
+  }
+  else if(ch=='z'||ch=='Z'){ load_defaults(); }
+  else if(ch=='L'){ Serial.println(F("\r\n[LED BAL] Blanco...")); led_balance_calibrate(); }
+  else if(ch=='w'||ch=='W'){ Serial.println(F("\r\n[WB] Blanco...")); wb_calibrate(); }
+
+  else if(ch=='u'||ch=='U'){
+    servoAuto = !servoAuto;
+    s_printf("\r\nServo AUTO: %s (ángulo=%d°)\r\n> ", servoAuto?"ON":"OFF", servoAngle);
+  }
+  else if(ch=='A'){ servo_set_deg(0);   matrix_for_color(C_VIOLETA);  Serial.print(F("\r\n> ")); }
+  else if(ch=='B'){ servo_set_deg(45);  ws_off();                     Serial.print(F("\r\n> ")); }
+  else if(ch=='C'){ servo_set_deg(90);  ws_off();                     Serial.print(F("\r\n> ")); }
+  else if(ch=='D'){ servo_set_deg(135); ws_off();                     Serial.print(F("\r\n> ")); }
+  else if(ch=='E'){ servo_set_deg(180); matrix_for_color(C_AMARILLO); Serial.print(F("\r\n> ")); }
+
+  else if(ch=='1'||ch=='2'||ch=='3'){
+    uint8_t idx = (uint8_t)(ch - '1');
+    const char* nm = (idx==0?"ROJO":(idx==1?"VERDE":"AZUL"));
+    s_printf("\r\n[Calibrando %s] coloca muestra...\r\n", nm);
+    calibrate_primary(idx);
+  }
+  else if(ch=='m'||ch=='M'){
+    uint16_t raw0[3]; measureTripletU16(raw0);
+    uint16_t h; uint8_t s;
+    int cls = classify_hue(raw0, &h, &s);
+
+    uint16_t raw[3]; apply_white_balance(raw0, raw);
+    uint8_t  chr[3]; uint8_t ok = chroma8_from_u16(raw, chr);
+
+    const char* name = (cls>=0)?CNAME[cls] : (cls==-1?"BAJA_SAT":"POCA_LUZ/INDEF");
+    if(!ok){
+      Serial.println(F("\r\nPOCA_LUZ.\r\n> "));
+    }else{
+      s_printf("\r\nRAW  R:%4u G:%4u B:%4u | NORM r:%3u g:%3u b:%3u | H=%3u S=%3u -> %s\r\n",
+               raw[0],raw[1],raw[2], chr[0],chr[1],chr[2], h, s, name);
+
+      if(servoAuto && cls>=0){
+        // histéresis: pedir dos veces el mismo
+        if(cls==lastIdx) { if(stable<255) stable++; }
+        else { lastIdx=cls; stable=1; }
+        if(stable>=STABLE_N){
+          servo_on_color_idx(cls); // solo enciende matriz si el servo se movió a 0/60/120/180
+          stable = 0;
+        }
+      } else if (!servoAuto) {
+        // en manual no tocamos matriz salvo órdenes A..E
+      }
+      Serial.print(F("> "));
+    }
+  }
+  else if(ch=='d'||ch=='D'){
+    uint16_t r0[3]; measureTripletU16(r0);
+    debug_distances(r0);
+    Serial.print(F("> "));
+  }
+  else if(ch=='s'||ch=='S'){
+    show_rgb_refs();
+  }
+  else if(ch=='h'||ch=='H'){
+    show_centers();
+  }
+  else if(ch=='p'||ch=='P'){
+    s_printf("\r\nServo ángulo: %d°  (AUTO=%s)\r\n> ", servoAngle, servoAuto?"ON":"OFF");
+  }
+  else if(ch=='x'||ch=='X'){
+    for(uint8_t i=0;i<3;i++) prim_ok[i]=0;
+    for(uint8_t i=0;i<C_COUNT;i++) center_en[i]=0;
+    wb_ok=0;
+    ws_off();
+    Serial.println(F("\r\nCalibraciones borradas."));
+    print_menu();
+  }
+  else{
+    Serial.println(F("\r\nComando invalido."));
+    print_menu();
+  }
+}
 
