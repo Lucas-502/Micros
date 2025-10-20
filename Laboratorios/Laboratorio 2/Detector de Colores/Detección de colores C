@@ -435,3 +435,85 @@ static void debug_distances_ui(const uint16_t raw0[3]){
     uart_puts("> ");
 }
 
+static void load_defaults(void){
+    levR=DEFAULT_LEV_R; levG=DEFAULT_LEV_G; levB=DEFAULT_LEV_B;
+    wb_ref[0]=DEFAULT_WB[0]; wb_ref[1]=DEFAULT_WB[1]; wb_ref[2]=DEFAULT_WB[2]; wb_ok=1;
+    for(uint8_t i=0;i<3;i++){ prim_chr[i][0]=DEFAULT_PRIM_CHR[i][0]; prim_chr[i][1]=DEFAULT_PRIM_CHR[i][1]; prim_chr[i][2]=DEFAULT_PRIM_CHR[i][2]; prim_ok[i]=1; }
+    for(uint8_t i=0;i<C_COUNT;i++){ center_hue[i]=DEFAULT_CENTER_HUE[i]; center_en[i]=1; }
+    uart_puts("[Perfil por defecto CARGADO]\r\n> ");
+}
+
+int main(void){
+    uart_init(); adc_init(); rgb_pwm_init(); servo_init();
+    DDRD |= (1<<PIN_WS_BIT); ws_off();
+    sei();
+
+    // arranque: rosado (60°) para verificar servo y WS
+    servo_on_color_idx(C_ROSADO);
+    #if USE_DEFAULT_PROFILE
+      load_defaults();
+    #endif
+
+    uart_puts("\r\n=== LDR+RGB HUE + SERVO + WS (AVR-C) ===\r\n");
+    print_menu();
+
+    for(;;){
+        char ch=0;
+        if(!uart_getc_nonblock(&ch)){ _delay_ms(1); continue; }
+        if(ch=='\r'||ch=='\n'||ch==' ') continue;
+
+        if(ch=='j'||ch=='J'){
+            uart_puts("\r\nTest RGB: R,G,B\r\n");
+            rgb_set_raw(255,0,0); _delay_ms(600);
+            rgb_set_raw(0,255,0); _delay_ms(600);
+            rgb_set_raw(0,0,255); _delay_ms(600);
+            rgb_off(); uart_puts("> ");
+        }
+        else if(ch=='z'||ch=='Z'){ load_defaults(); }
+        else if(ch=='L'){ uart_puts("\r\n[LED BAL] Blanco...\r\n"); led_balance_calibrate(); }
+        else if(ch=='w'||ch=='W'){ uart_puts("\r\n[WB] Blanco...\r\n"); wb_calibrate(); }
+
+        else if(ch=='u'||ch=='U'){ servoAuto^=1; uart_printf("\r\nServo AUTO: %s (angulo=%d)\r\n> ", servoAuto?"ON":"OFF", servoAngle); }
+        else if(ch=='A'){ servo_set_deg(0);   ws_off(); uart_puts("\r\n> "); }
+        else if(ch=='B'){ servo_set_deg(45);  ws_off(); uart_puts("\r\n> "); }
+        else if(ch=='C'){ servo_set_deg(90);  ws_off(); uart_puts("\r\n> "); }
+        else if(ch=='D'){ servo_set_deg(135); ws_off(); uart_puts("\r\n> "); }
+        else if(ch=='E'){ servo_set_deg(180); ws_off(); uart_puts("\r\n> "); }
+
+        else if(ch=='1'||ch=='2'||ch=='3'){
+            uint8_t idx=(uint8_t)(ch-'1'); const char* nm=(idx==0?"ROJO":(idx==1?"VERDE":"AZUL"));
+            uart_printf("\r\n[Calibrando %s] coloca muestra...\r\n", nm); calibrate_primary(idx);
+        }
+        else if(ch=='m'||ch=='M'){
+            uint16_t raw0[3]; measure_triplet_u16(raw0);
+            uint16_t h; uint8_t s; int cls=classify_hue(raw0,&h,&s);
+
+            uint16_t raw[3]; apply_white_balance(raw0, raw);
+            uint8_t  chr[3]; uint8_t ok=chroma8_from_u16(raw, chr);
+
+            const char* name=(cls>=0)?CNAME[cls] : (cls==-1?"BAJA_SAT":"POCA_LUZ/INDEF");
+            if(!ok){ uart_puts("\r\nPOCA_LUZ.\r\n> "); }
+            else{
+                uart_printf("\r\nRAW  R:%4u G:%4u B:%4u | NORM r:%3u g:%3u b:%3u | H=%3u S=%3u -> %s\r\n",
+                            raw[0],raw[1],raw[2], chr[0],chr[1],chr[2], h, s, name);
+
+                if(servoAuto && cls>=0){
+                    if(cls==lastIdx){ if(stable<255) stable++; } else { lastIdx=cls; stable=1; }
+                    if(stable>=STABLE_N){ servo_on_color_idx(cls); stable=0; }
+                } else { stable=0; }
+                uart_puts("> ");
+            }
+        }
+        else if(ch=='d'||ch=='D'){ uint16_t r0[3]; measure_triplet_u16(r0); debug_distances_ui(r0); }
+        else if(ch=='s'||ch=='S'){ show_rgb_refs(); }
+        else if(ch=='h'||ch=='H'){ show_centers(); }
+        else if(ch=='p'||ch=='P'){ uart_printf("\r\nServo angulo: %d  (AUTO=%s)\r\n> ", servoAngle, servoAuto?"AUTO":"OFF"); }
+        else if(ch=='x'||ch=='X'){
+            for(uint8_t i=0;i<3;i++) prim_ok[i]=0;
+            for(uint8_t i=0;i<C_COUNT;i++) center_en[i]=0;
+            wb_ok=0; ws_off();
+            uart_puts("\r\nCalibraciones borradas.\r\n"); print_menu();
+        }
+        else { uart_puts("\r\nComando invalido.\r\n"); print_menu(); }
+    }
+}
