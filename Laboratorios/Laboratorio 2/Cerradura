@@ -107,7 +107,6 @@ static void pant_cierre(void){
     twi_lcd_cmd(0x80); twi_lcd_msg("Cerrando...");
 }
 
-// === Autor A – Ronda 2: Scanner de teclado ===
 static char Teclado(void){
     PORTD |= (C1|C2);
     PORTB |= (C3|C4);
