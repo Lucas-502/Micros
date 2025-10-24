@@ -1,4 +1,4 @@
-// che voy creando el codigo del control de temperatura pero sin uart para probarlo en picsimlab
+// che voy creando el codigo del control de temperatura, es  para probarlo en picsimlab, le falta el menu y demas cosas, pero lo van haciendo de a poco
 
 #define F_CPU 16000000UL
 #include <avr/io.h>
