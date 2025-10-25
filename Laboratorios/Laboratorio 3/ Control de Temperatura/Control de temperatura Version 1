@@ -36,3 +36,15 @@ uint16_t read_ADC(uint8_t ch) {
     while (ADCSRA & (1<<ADSC));
     return ADC;
 }
+
+// PWM en OC0A  pin PD6 Arduino
+void PWM_init() {
+    DDRD |= (1<<PD6); // OC0A como salida
+    TCCR0A = (1<<COM0A1)|(1<<WGM01)|(1<<WGM00); // Fast PWM, no invertido
+    TCCR0B = (1<<CS01)|(1<<CS00); // prescaler 64
+    OCR0A = 0;
+}
+
+// el coso del calor va en PB0 pin digital 8
+void heater_on() { PORTB |= (1<<PB0); }
+void heater_off() { PORTB &= ~(1<<PB0); }
