@@ -48,3 +48,14 @@ void PWM_init() {
 // el coso del calor va en PB0 pin digital 8
 void heater_on() { PORTB |= (1<<PB0); }
 void heater_off() { PORTB &= ~(1<<PB0); }
+
+int main(void) {
+    DDRB |= (1<<PB0); // calefactor
+    USART_init(103); // 9600 baud
+    ADC_init();
+    PWM_init();
+
+    char buffer[64];
+    uint8_t midPoint = 26;
+    uint8_t lower, upper;
+    int tempC = 0;
