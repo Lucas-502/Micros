@@ -59,3 +59,41 @@ int main(void) {
     uint8_t midPoint = 26;
     uint8_t lower, upper;
     int tempC = 0;
+
+ while (1) {
+        // Leer temperatura
+        uint16_t adc = read_ADC(0);
+        uint16_t mV = adc * 5000UL / 1024;
+        tempC = mV / 10;
+
+        // Ajustar umbrales
+        lower = midPoint - 4;
+        upper = midPoint + 4;
+
+        // Control
+        if (tempC < lower) {
+            heater_on();
+            OCR0A = 0;
+            sprintf(buffer, "%d,Calefactor ON\n", tempC);
+        } else if (tempC <= upper) {
+            heater_off();
+            OCR0A = 0;
+            sprintf(buffer, "%d,Reposo\n", tempC);
+        } else {
+            heater_off();
+            if (tempC <= upper+10) OCR0A = 85;
+            else if (tempC <= upper+20) OCR0A = 170;
+            else OCR0A = 255;
+            sprintf(buffer, "%d,Ventilador PWM %d\n", tempC, OCR0A);
+        }
+        USART_print(buffer);
+
+        // Ajuste dinámico del punto medio
+        if (UCSR0A & (1<<RXC0)) {
+            char r = USART_receive();
+            if (r >= '2' && r <= '5') midPoint = (r - '0') * 10;
+        }
+
+        _delay_ms(1000);
+    }
+}
