@@ -100,3 +100,98 @@ int main(void){
     int16_t last_pv=0; uint16_t stall_cnt=0;
     uint16_t boost_timer_ms=0; uint8_t dither_cnt=0;
 
+for(;;){
+        int16_t sp=avg_upd(rbSP,AVG_N,&ridx,(int16_t)adc_read(0)); // A0
+        int16_t pv=avg_upd(rbPV,AVG_N,&ridx,(int16_t)adc_read(1)); // A1
+        int16_t e=sp-pv; int16_t ae=(e>=0)?e:-e; int8_t sgn=(e>0)?+1:(e<0?-1:0);
+
+        int16_t dyn_cap_pwm;
+        if (ae >= CREEP_BAND) {
+            dyn_cap_pwm = TOP_PWM_CAP;
+        } else {
+            int32_t span = (int32_t)(TOP_PWM_CAP - HOLD_PWM);
+            dyn_cap_pwm = (int16_t)(HOLD_PWM + (span * ae) / CREEP_BAND);
+            if (dyn_cap_pwm < HOLD_PWM) dyn_cap_pwm = HOLD_PWM;
+        }
+
+        if(((pv - last_pv)>=-PV_STALL_DELTA) && ((pv - last_pv)<=PV_STALL_DELTA) && (ae > HOLD_BAND)){
+            if(stall_cnt < 1000) stall_cnt++;
+        }else{
+            stall_cnt = 0;
+        }
+        last_pv = pv;
+
+        int32_t Up = (int32_t)KP_NUM*ae/KP_DEN;
+        Iacc += (int32_t)KI_NUM*e/KI_DEN; if(Iacc>255) Iacc=255; if(Iacc<-255) Iacc=-255;
+    
+        if (sgn != 0 && last_sgn != 0 && sgn != last_sgn && ae < CREEP_BAND) {
+            Iacc = (Iacc * 3) / 4; 
+        }
+        last_sgn = sgn;
+
+        int32_t Uff = (ae>0)? U_STATIC : 0;
+        int32_t u = Up + Iacc + Uff; if(u<0)u=0; if(u>U_MAX)u=U_MAX;
+
+        int16_t target_pwm; int8_t dir; uint8_t boost_on = 0;
+
+        if(ae <= DEAD_BAND){
+            dir = 0; target_pwm = 0; motor_brake();
+            boost_timer_ms = 0;
+        } else if(ae <= HOLD_BAND){
+            dir = (sgn!=0)? sgn : last_dir;
+            int16_t base = (HOLD_PWM > u)? HOLD_PWM : (int16_t)u;
+            int16_t d_pwm = (ae < (HOLD_BAND/2)) ? (DITHER_PWM/2) : DITHER_PWM;
+            int16_t dith = ( (dither_cnt / DITHER_PERIOD) % 2 ) ? (+d_pwm) : (-d_pwm);
+            target_pwm = base + dith; if(target_pwm < HOLD_PWM) target_pwm = HOLD_PWM;
+            if(dir>0) motor_fwd(); else motor_rev();
+            dither_cnt++;
+            boost_timer_ms = 0;
+        } else if(ae <= CREEP_BAND){
+            //Avance lento con par alto 
+            dir = sgn;
+            int16_t base = (CREEP_PWM > u)? CREEP_PWM : (int16_t)u;
+            target_pwm = base;
+            if(dir>0) motor_fwd(); else motor_rev();
+        } else {
+            //Lejos: empuje fuerte
+            dir = sgn;
+            int16_t uu = (u < U_MIN)? U_MIN : (int16_t)u;
+            target_pwm = uu;
+            if(dir>0) motor_fwd(); else motor_rev();
+        }
+
+        if(stall_cnt >= STALL_TICKS && boost_timer_ms == 0){
+            target_pwm = (BOOST_PWM > target_pwm) ? BOOST_PWM : target_pwm;
+            boost_timer_ms = BOOST_MS;
+            boost_on = 1;
+        }
+
+        if(target_pwm > dyn_cap_pwm) target_pwm = dyn_cap_pwm;
+        if(target_pwm < 0) target_pwm = 0;
+
+        //rampa de PWM
+        if(target_pwm > pwm_cmd){
+            int16_t step = target_pwm - pwm_cmd;
+            if(step > SLEW_UP) step = SLEW_UP;
+            pwm_cmd += step;
+        } else if(target_pwm < pwm_cmd){
+            int16_t step = pwm_cmd - target_pwm;
+            if(step > SLEW_DOWN) step = SLEW_DOWN;
+            pwm_cmd -= step;
+        }
+
+        pwm_set((uint8_t)pwm_cmd);
+        if(dir!=0) last_dir=dir;
+
+        //Timers y telemetría
+        if(boost_timer_ms > 0){
+            if(boost_timer_ms > LOOP_MS) boost_timer_ms -= LOOP_MS;
+            else boost_timer_ms = 0;
+        }
+
+        pu32(t); pch(','); pi16(sp); pch(','); pi16(pv); pch(','); pi16(pwm_cmd); pch(','); pi16(dir);
+        pch(','); pi16(boost_on); pch('\r'); pch('\n');
+
+        _delay_ms(LOOP_MS); t += LOOP_MS;
+    }
+}
