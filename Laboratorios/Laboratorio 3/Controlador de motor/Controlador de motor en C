@@ -87,3 +87,16 @@ static int16_t avg_upd(int16_t *buf, uint8_t n, uint8_t *idx, int16_t x){
     buf[*idx]=x; int32_t s=0; for(uint8_t i=0;i<n;i++) s+=buf[i];
     *idx=(uint8_t)((*idx+1)%n); return (int16_t)(s/n);
 }
+
+int main(void){
+    uart_init(115200); adc_init(); pwm_init(); gpio_init();
+    ps("t_ms,SP,PV,PWM,DIR,BOOST\r\n");
+
+    int16_t rbSP[AVG_N]={0}, rbPV[AVG_N]={0}; uint8_t ridx=0;
+    int32_t Iacc=0; int8_t last_dir=+1;
+    int8_t  last_sgn=0;                 
+    uint32_t t=0;
+    int16_t pwm_cmd=0;
+    int16_t last_pv=0; uint16_t stall_cnt=0;
+    uint16_t boost_timer_ms=0; uint8_t dither_cnt=0;
+
