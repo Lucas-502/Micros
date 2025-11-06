@@ -89,3 +89,60 @@ def opcion_1_graficas_en_vivo():
     ax.set_ylim(0, 1023); ax.legend(loc="upper right")
 
     buf = b""
+
+    def parse_line(s):
+        parts = s.strip().split(",")
+        if len(parts) != 6:
+            if s:
+                print(f"[RAW@{used_port}] {s}")
+            return None
+        try:
+            t  = int(parts[0]); spv = int(parts[1]); pvv = int(parts[2])
+            pw = int(parts[3]); di  = int(parts[4]); bo  = int(parts[5])
+            return t, spv, pvv, pw, di, bo
+        except Exception:
+            print(f"[BADFMT@{used_port}] {s}")
+            return None
+
+    def update(_):
+        nonlocal buf
+        try:
+            incoming = ser.read(4096)
+        except serial.SerialException as e:
+            ax_text.clear(); ax_text.axis("off")
+            ax_text.text(0, 1, f"[{now_str()}] ERROR puerto: {e}", va="top", family="monospace")
+            return line_sp, line_pv, line_pwm
+
+        if incoming:
+            buf += incoming
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                s = line.decode(errors="ignore").strip()
+                if not s or s.startswith("t_ms"):
+                    continue
+                parsed = parse_line(s)
+                if not parsed:
+                    continue
+                t, spv, pvv, pw, di, bo = parsed
+                t_ms.append(t); sp.append(spv); pv.append(pvv); pwm.append(pw)
+
+                if csv_writer:
+                    csv_writer.writerow([datetime.datetime.now().isoformat(), t, spv, pvv, pw, di, bo])
+
+                rows.appendleft(
+                    f"[{now_str()}] t={t:6d}  SP={spv:4d}  PV={pvv:4d}  PWM={pw:3d}  DIR={dir_to_txt(di):6s}  BOOST={bo}"
+                )
+
+        n = len(sp); xs = list(range(max(0, n - WINDOW_SAMPLES), n))
+        ys_sp = list(sp)[-len(xs):]; ys_pv = list(pv)[-len(xs):]
+        ys_pwm4 = [v * 4 for v in list(pwm)[-len(xs):]]
+
+        line_sp.set_data(xs, ys_sp); line_pv.set_data(xs, ys_pv); line_pwm.set_data(xs, ys_pwm4)
+        ax.set_xlim(xs[0] if xs else 0, xs[-1] if xs else 1)
+
+        ax_text.clear(); ax_text.axis("off")
+        snippet = "\n".join(list(rows)[:25]) if rows else "Esperando datos...\nRecordá: t_ms,SP,PV,PWM,DIR,BOOST"
+        ax_text.text(0, 1, snippet, va="top", family="monospace")
+
+        return line_sp, line_pv, line_pwm
+
