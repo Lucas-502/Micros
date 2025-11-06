@@ -39,3 +39,11 @@ static uint16_t adc_read(uint8_t ch){ ADMUX=(ADMUX&0xF0)|(ch&0x0F); ADCSRA|=(1<<
 //PWM
 static void pwm_init(void){ DDRB|=(1<<PB1); TCCR1A=(1<<WGM10)|(1<<COM1A1); TCCR1B=(1<<WGM12)|(1<<CS11); OCR1A=0; }
 static inline void pwm_set(uint8_t v){ OCR1A=v; }
+
+//L293D
+static void gpio_init(void){ DDRD|=(1<<PD7); DDRB|=(1<<PB0); }
+static inline void motor_coast(void){ PORTD&=~(1<<PD7); PORTB&=~(1<<PB0); }
+static inline void motor_brake(void){ PORTD|=(1<<PD7);  PORTB|=(1<<PB0); }
+static inline void motor_fwd(void){   PORTD|=(1<<PD7);  PORTB&=~(1<<PB0); }
+static inline void motor_rev(void){   PORTD&=~(1<<PD7); PORTB|=(1<<PB0); }
+
