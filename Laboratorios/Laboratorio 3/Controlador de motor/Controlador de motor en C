@@ -4,3 +4,13 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <stdint.h>
+
+//UART 115200
+static void uart_init(uint32_t b){
+    uint16_t u = (uint16_t)(F_CPU/(8UL*b) - 1UL);  
+    UBRR0H = (uint8_t)(u >> 8);
+    UBRR0L = (uint8_t)(u & 0xFF);
+    UCSR0A = (1<<U2X0);                  
+    UCSR0B = (1<<TXEN0);                
+    UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);  
+}
