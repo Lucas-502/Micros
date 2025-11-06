@@ -28,3 +28,24 @@ def pick_port(user_port: str | None):
     prefer.sort(reverse=True)
     return prefer[0][1], ports
 
+def open_serial(port, baud, timeout):
+    dev, ports = pick_port(port)
+    print("[INFO] Puertos detectados:")
+    for p in ports:
+        print(f"  - {p.device:>6}  {p.description}")
+    print(f"[INFO] Intentando abrir: {dev} @ {baud}")
+    try:
+        ser = serial.Serial(dev, baudrate=baud, timeout=timeout)
+        try:
+            ser.dtr = False
+            ser.rts = False
+            time.sleep(0.3)
+        except Exception:
+            pass
+        ser.reset_input_buffer()
+        return ser, dev
+    except Exception as e:
+        raise SystemExit(f"[ERROR] No pude abrir el puerto {dev}: {e}\n"
+                         "Cerrá el Monitor Serie del IDE y probá de nuevo.")
+
+
