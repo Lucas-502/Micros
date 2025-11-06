@@ -48,4 +48,44 @@ def open_serial(port, baud, timeout):
         raise SystemExit(f"[ERROR] No pude abrir el puerto {dev}: {e}\n"
                          "Cerrá el Monitor Serie del IDE y probá de nuevo.")
 
+def dir_to_txt(d):
+    try:
+        d = int(d)
+    except:
+        return "?"
+    return "DER" if d > 0 else ("IZQ" if d < 0 else "PARADO")
 
+def now_str():
+    return datetime.datetime.now().strftime("%H:%M:%S")
+
+def opcion_1_graficas_en_vivo():
+    ser, used_port = open_serial(PORT, BAUD, READ_TIMEOUT_S)
+
+    t_ms   = deque(maxlen=WINDOW_SAMPLES)
+    sp     = deque(maxlen=WINDOW_SAMPLES)
+    pv     = deque(maxlen=WINDOW_SAMPLES)
+    pwm    = deque(maxlen=WINDOW_SAMPLES)
+    rows   = deque(maxlen=200)
+
+    csv_writer = None
+    csv_file = None
+    if SAVE_CSV:
+        fname = f"log_motor_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        csv_file = open(fname, "w", newline="")
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["iso_time","t_ms","SP","PV","PWM","DIR","BOOST"])
+
+    fig = plt.figure(figsize=(10, 5))
+    gs = fig.add_gridspec(1, 2, width_ratios=[3, 2], wspace=0.25)
+    ax = fig.add_subplot(gs[0, 0])
+    ax_text = fig.add_subplot(gs[0, 1]); ax_text.axis("off")
+
+    (line_sp,)  = ax.plot([], [], label="SP")
+    (line_pv,)  = ax.plot([], [], label="PV")
+    (line_pwm,) = ax.plot([], [], label="PWM×4")
+
+    ax.set_title(f"SP / PV / PWM (tiempo real)  —  {used_port} @ {BAUD}")
+    ax.set_xlabel("muestras recientes"); ax.set_ylabel("valor (0..1023)")
+    ax.set_ylim(0, 1023); ax.legend(loc="upper right")
+
+    buf = b""
