@@ -14,3 +14,20 @@ static void uart_init(uint32_t b){
     UCSR0B = (1<<TXEN0);                
     UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);  
 }
+
+//TX
+static inline void pch(char c){ while(!(UCSR0A & (1<<UDRE0))); UDR0 = c; }
+static void ps(const char *s){ while(*s) pch(*s++); }
+static void pu32(uint32_t v){
+    char b[11]; int i = 10; b[i] = 0;
+    if(!v){ pch('0'); return; }
+    while(v && i){ b[--i] = '0' + (v % 10U); v /= 10U; }
+    ps(&b[i]);
+}
+static void pi16(int16_t v){
+    if(v < 0){ pch('-'); v = -v; }
+    char b[7]; int i = 6; b[i] = 0;
+    if(!v){ pch('0'); return; }
+    while(v && i){ b[--i] = '0' + (v % 10); v /= 10; }
+    ps(&b[i]);
+}
