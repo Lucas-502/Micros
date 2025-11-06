@@ -47,3 +47,43 @@ static inline void motor_brake(void){ PORTD|=(1<<PD7);  PORTB|=(1<<PB0); }
 static inline void motor_fwd(void){   PORTD|=(1<<PD7);  PORTB&=~(1<<PB0); }
 static inline void motor_rev(void){   PORTD&=~(1<<PD7); PORTB|=(1<<PB0); }
 
+//CONTROL
+#define LOOP_MS        10
+#define AVG_N           8
+
+//Ganancias
+#define KP_NUM          2
+#define KP_DEN         10
+#define KI_NUM          1
+#define KI_DEN         50
+
+//Par y límites
+#define U_STATIC       80
+#define U_MIN          95
+#define U_MAX         255
+
+//Cap global
+#define TOP_PWM_CAP   130
+
+//Zonas cerca del setpoint
+#define CREEP_BAND     35
+#define CREEP_PWM      90
+#define HOLD_BAND      20   
+#define HOLD_PWM       75
+#define DEAD_BAND       3   
+
+#define SLEW_UP         1   
+#define SLEW_DOWN       4
+
+#define PV_STALL_DELTA  2
+#define STALL_TICKS    15
+#define BOOST_PWM     200
+#define BOOST_MS       80
+
+#define DITHER_PWM      10
+#define DITHER_PERIOD    4
+
+static int16_t avg_upd(int16_t *buf, uint8_t n, uint8_t *idx, int16_t x){
+    buf[*idx]=x; int32_t s=0; for(uint8_t i=0;i<n;i++) s+=buf[i];
+    *idx=(uint8_t)((*idx+1)%n); return (int16_t)(s/n);
+}
