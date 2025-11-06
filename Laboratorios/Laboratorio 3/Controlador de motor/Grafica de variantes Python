@@ -1,1 +1,30 @@
+PORT = None            
+BAUD = 115200
+READ_TIMEOUT_S = 0.05
+WINDOW_SAMPLES = 800
+SAVE_CSV = False
+
+from serial.tools import list_ports
+import serial, time, csv, datetime
+from collections import deque
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+def pick_port(user_port: str | None):
+    ports = list(list_ports.comports())
+    if user_port:
+        return user_port, ports
+    prefer = []
+    for p in ports:
+        desc = f"{p.description} {p.hwid}".lower()
+        score = 0
+        if "arduino" in desc: score += 3
+        if "ch340"  in desc or "wchusb" in desc: score += 2
+        if "ftdi"   in desc: score += 2
+        if "usb"    in desc: score += 1
+        prefer.append((score, p.device, p.description))
+    if not prefer:
+        raise RuntimeError("No se encontró ningún puerto serie. Conectá el Arduino.")
+    prefer.sort(reverse=True)
+    return prefer[0][1], ports
 
