@@ -24,7 +24,7 @@ static inline void uart_putc(char c) {
 static void uart_puts(const char *s) {
     while(*s) uart_putc(*s++);
 }
-/* impresores sin itoa() */
+// impresores sin itoa()
 static void uart_u16(uint16_t v){
     char buf[6]; uint8_t i=0;
     do{ buf[i++] = (char)('0' + (v % 10)); v /= 10; }while(v);
@@ -45,4 +45,24 @@ static void t0_init_1ms(void){
     OCR0A  = 249;                 // 16 MHz / 64 / (249+1) = 1000 Hz
     TIMSK0 = (1<<OCIE0A);
     TCCR0B = (1<<CS01)|(1<<CS00); // prescaler 64
+}
+
+// ADC LM35 
+static void adc_init(void){
+    ADMUX  = (1<<REFS0);                  // AVcc ref, ADC0 (MUX=0000)
+    ADCSRA = (1<<ADEN) | (1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0); // presc 128
+}
+static uint16_t adc_read(void){
+    ADCSRA |= (1<<ADSC);
+    while(ADCSRA & (1<<ADSC));
+    return ADC;
+}
+static int16_t lm35_read_celsius(void){
+    // promedio de 8 lecturas + redondeo a °C (10 mV/°C)
+    uint32_t acc=0;
+    for(uint8_t i=0;i<8;i++){ acc += adc_read(); _delay_ms(2); }
+    uint16_t adc = (uint16_t)(acc/8);
+    uint32_t mV  = (uint32_t)adc * 5000UL / 1023UL;
+    int16_t tC   = (int16_t)((mV + 5) / 10);
+    return tC;
 }
