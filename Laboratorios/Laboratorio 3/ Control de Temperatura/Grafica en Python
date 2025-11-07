@@ -107,4 +107,36 @@ print("""
   Hotkeys en la ventana del gráfico: ]/[ suben/bajan MID · }/{ suben/bajan BW
   h: HA · f: FA · 0/1/2/3: Fan OFF/LOW/MED/HIGH · s: STATUS
   Cortar: Ctrl+C
+
 """.strip())
+#  Hotkeys (grafico; este callback SI corre en el hilo principal) 
+def on_key(event):
+    global mid, bw, _band_dirty
+    try:
+        if event.key == ']':
+            mid += 1; ser_write_line(f"M={mid}"); _band_dirty = True
+        elif event.key == '[':
+            mid -= 1; ser_write_line(f"M={mid}"); _band_dirty = True
+        elif event.key == '}':
+            bw += 1;  ser_write_line(f"BW={bw}"); _band_dirty = True
+        elif event.key == '{':
+            bw = max(0, bw-1); ser_write_line(f"BW={bw}"); _band_dirty = True
+        elif event.key == 'h':
+            ser_write_line("HA")
+        elif event.key == 'f':
+            ser_write_line("FA")
+        elif event.key == '0':
+            ser_write_line("FF")
+        elif event.key == '1':
+            ser_write_line("FL")
+        elif event.key == '2':
+            ser_write_line("FM")
+        elif event.key == '3':
+            ser_write_line("FH")
+        elif event.key == 's':
+            ser_write_line("S")
+    except Exception as e:
+        print("[WARN] on_key:", e)
+
+fig.canvas.mpl_connect('key_press_event', on_key)
+
