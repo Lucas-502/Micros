@@ -28,3 +28,36 @@ LINE_END = "\r\n"
 RX_FULL = re.compile(r"Temp=(\d+)\s+C\s+\|\s+ZONE=(\w+)\s+\|\s+OUT=(\d+)")
 ZONE_MAP = {"HEAT":0, "OK":1, "LOW":2, "MED":3, "HIGH":4}
 FAN_FROM_ZONE = {0:0, 1:0, 2:1, 3:2, 4:3}  # nivel 0..3 para graficar
+
+#  Serial 
+def open_serial(port, baud):
+    try:
+        s = serial.Serial(port, baud, timeout=1)
+        time.sleep(2.0)           # UNO suele resetear al abrir el puerto
+        s.reset_input_buffer()    # limpia basura del bootloader
+        print(f"[OK] Abierto {port} @ {baud}")
+        return s
+    except Exception as e:
+        ports = [p.device for p in list_ports.comports()]
+        print(f"[ERR] No pude abrir {port}. Puertos disponibles: {ports}")
+        print("Cerrá otros monitores serie y verificá el COM.")
+        raise e
+
+try:
+    ser = open_serial(args.port, args.baud)
+except Exception:
+    sys.exit(1)
+
+ser_lock = threading.Lock()
+
+def ser_write_line(line: str):
+    """Envia una linea al puerto (si esta abierto) usando CRLF, sin romper el programa."""
+    try:
+        if ser and ser.is_open:
+            with ser_lock:
+                ser.write((line + LINE_END).encode("ascii", errors="ignore"))
+            print(f"[TX] {line}")
+        else:
+            print("[WARN] Puerto no abierto. No se envio:", line)
+    except (PortNotOpenError, SerialException) as e:
+        print("[WARN] No se pudo escribir en el puerto:", e)
