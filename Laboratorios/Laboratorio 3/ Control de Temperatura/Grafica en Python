@@ -1,1 +1,21 @@
+import argparse, csv, re, sys, threading, time
+from datetime import datetime
 
+import matplotlib.pyplot as plt
+import serial
+from serial.serialutil import SerialException, PortNotOpenError
+from serial.tools import list_ports
+
+# CLI args 
+ap = argparse.ArgumentParser(description="Grafica temp y envia comandos por UART")
+ap.add_argument("--port", required=True, help="Puerto serie (ej: COM6 o /dev/ttyACM0)")
+ap.add_argument("--baud", type=int, default=9600, help="Baudrate (def 9600)")
+ap.add_argument("--csv", default="log_temp.csv", help="Archivo CSV de salida")
+ap.add_argument("--mid", type=int, default=26, help="Punto medio inicial para dibujar banda")
+ap.add_argument("--bw",  type=int, default=4,  help="Media-banda inicial para dibujar banda")
+args = ap.parse_args()
+
+# Estado local solo grafico
+mid = args.mid
+bw  = args.bw
+_band_dirty = False          #  se actualiza en hilos, la dibuja el hilo principal
