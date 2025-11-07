@@ -35,3 +35,14 @@ static void uart_i16(int16_t v){
     uart_u16((uint16_t)v);
 }
 static void uart_u8(uint8_t v){ uart_u16(v); }
+
+volatile uint32_t ms = 0;
+ISR(TIMER0_COMPA_vect){ ms++; }
+
+static void t0_init_1ms(void){
+    TCCR0A = (1<<WGM01);          // CTC
+    TCCR0B = 0;
+    OCR0A  = 249;                 // 16 MHz / 64 / (249+1) = 1000 Hz
+    TIMSK0 = (1<<OCIE0A);
+    TCCR0B = (1<<CS01)|(1<<CS00); // prescaler 64
+}
