@@ -85,3 +85,38 @@ static void fan_out(uint8_t val){
     PORTB |= (1<<PB2);       // mantener ON
     last_out = 255;
 }
+
+/* Ráfagas (burst) */
+static bool     burst_enabled = false;
+static bool     burst_on      = false;
+static uint16_t ton_ms = 0, toff_ms = 0;
+static uint32_t burst_next_ms = 0;
+
+static void fan_set_burst(uint16_t ton, uint16_t period){
+    if(ton > period) ton = period;
+    ton_ms  = ton;
+    toff_ms = period - ton;
+    if(ton_ms == 0 || period == 0){
+        burst_enabled = false;
+        burst_on      = false;
+        fan_out(0);
+        return;
+    }
+    burst_enabled = true;
+    burst_on      = true;
+    fan_out(255);
+    burst_next_ms = ms + ton_ms;
+}
+static void fan_set_high_continuous(void){
+    burst_enabled = false;
+    burst_on      = true;
+    fan_out(255);
+}
+static void fan_update(void){
+    if(!burst_enabled) return;
+    if((int32_t)(ms - burst_next_ms) >= 0){
+        burst_on = !burst_on;
+        fan_out(burst_on ? 255 : 0);
+        burst_next_ms = ms + (burst_on ? ton_ms : toff_ms);
+    }
+}
