@@ -67,3 +67,23 @@ try:
     open(args.csv, "x").write("timestamp,time_s,tempC,zone,out,heater,fan_level,raw\n")
 except FileExistsError:
     pass
+
+# Plot 
+plt.ion()
+fig, ax = plt.subplots()
+lineT, = ax.plot([], [], label="Temp [C]")
+ax.set_xlabel("Tiempo [s]")
+ax.set_ylabel("Temp [C]")
+ax.grid(True)
+
+# Banda mid±bw que actualizamos cuando cambian mid/bw
+band = ax.axhspan(mid-bw, mid+bw, alpha=0.15, label="Rango ideal (mid±bw)")
+
+ax2 = ax.twinx()
+lineF, = ax2.plot([], [], linestyle="--", label="Nivel Fan (0..3)")
+ax2.set_ylabel("Nivel Fan")
+ax2.set_ylim(-0.2, 3.2)
+
+lines = [lineT, lineF]
+ax.legend(lines, [l.get_label() for l in lines], loc="upper left")
+
