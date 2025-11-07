@@ -154,3 +154,14 @@ def opcion_1_graficas_en_vivo():
         if csv_file: csv_file.close()
         if ser and ser.is_open: ser.close()
         print(f"[{now_str()}] Cerrado.")
+
+#Llamador
+if __name__ == "__main__":
+    print("[BOOT] Script cargado. Lanzando Opción 1...")
+    try:
+        opcion_1_graficas_en_vivo()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("\n[ERROR] La Opción 1 falló:", e)
+
