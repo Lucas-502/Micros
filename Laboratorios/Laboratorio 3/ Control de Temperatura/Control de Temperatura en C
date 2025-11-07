@@ -66,3 +66,22 @@ static int16_t lm35_read_celsius(void){
     int16_t tC   = (int16_t)((mV + 5) / 10);
     return tC;
 }
+
+//HW heater & fan
+static inline void heater_on(void){  PORTD |=  (1<<PD5); }
+static inline void heater_off(void){ PORTD &= ~(1<<PD5); }
+//IN2 (PB5) LOW fijo. IN1 (PB2) conmuta
+static uint8_t last_out = 0;
+static void fan_out(uint8_t val){
+    if(val == 0){
+        PORTB &= ~(1<<PB2);  // IN1=0
+        last_out = 0;
+        return;
+    }
+    if(last_out == 0){
+        PORTB |=  (1<<PB2);  // patada inicial
+        _delay_ms(180);
+    }
+    PORTB |= (1<<PB2);       // mantener ON
+    last_out = 255;
+}
