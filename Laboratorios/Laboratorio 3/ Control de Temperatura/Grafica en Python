@@ -140,3 +140,40 @@ def on_key(event):
 
 fig.canvas.mpl_connect('key_press_event', on_key)
 
+# ------------------ Hilo consola (input) ------------------
+stop_evt = threading.Event()
+
+def tx_loop():
+    global mid, bw, _band_dirty
+    while not stop_evt.is_set():
+        try:
+            user = input().strip()
+        except (EOFError, KeyboardInterrupt):
+            stop_evt.set(); break
+        if not user:
+            continue
+
+        parts = user.replace(",", " ").split()
+        # Helpers: mid/bw/rng — NO tocar gráfico acá; solo marcar flag
+        try:
+            if len(parts)>=2 and parts[0].lower() in ("mid","m") and parts[1].lstrip("-").isdigit():
+                mid = int(parts[1]); ser_write_line(f"M={mid}"); _band_dirty = True; continue
+            if len(parts)>=2 and parts[0].lower() in ("bw","band","banda") and parts[1].lstrip("-").isdigit():
+                bw = max(0, int(parts[1])); ser_write_line(f"BW={bw}"); _band_dirty = True; continue
+            if len(parts)>=3 and parts[0].lower() in ("rng","range","rango"):
+                a = float(parts[1]); b = float(parts[2])
+                if a>b: a,b = b,a
+                mid = int(round((a+b)/2))
+                bw  = int(round((b-a)/2))
+                ser_write_line(f"M={mid}"); ser_write_line(f"BW={bw}")
+                _band_dirty = True
+                print(f"[INFO] mid={mid} bw={bw} (de {a}..{b})")
+                continue
+        except ValueError:
+            pass
+
+        # Comando crudo (HO/HF/HA/FL/FM/FH/FF/FA/M=../BW=../S/H)
+        ser_write_line(user)
+
+tx_thread = threading.Thread(target=tx_loop, daemon=True)
+tx_thread.start()
