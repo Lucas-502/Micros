@@ -120,3 +120,55 @@ static void fan_update(void){
         burst_next_ms = ms + (burst_on ? ton_ms : toff_ms);
     }
 }
+
+//Modos y setpoint
+typedef enum { H_AUTO, H_ON, H_OFF } HeaterMode;
+typedef enum { F_AUTO, F_OFF, F_LOW, F_MED, F_HIGH } FanMode;
+
+static HeaterMode hmode = H_AUTO;
+static FanMode    fmode = F_AUTO;
+
+static int16_t mid = 26;  // punto medio (°C)
+static int16_t bw  = 4;   // media-banda (°C)
+#define STEP 4            // escalón para LOW/MED/HIGH
+static uint16_t BURST_MS   = 500;
+static uint16_t TON_LOW_MS = 220;
+static uint16_t TON_MED_MS = 320;
+
+// T→zona (0=HEAT,1=OK,2=LOW,3=MED,4=HIGH)
+static uint8_t zone_from_temp(int16_t T){
+    int16_t ok_lo = mid - bw;
+    int16_t ok_hi = mid + bw;
+    if      (T <= ok_lo - 1)       return 0; // HEAT
+    else if (T <= ok_hi)           return 1; // OK
+    else if (T <= ok_hi + STEP)    return 2; // LOW
+    else if (T <= ok_hi + 2*STEP)  return 3; // MED
+    else                           return 4; // HIGH
+}
+
+//Autor: Valentino pelado borges — Segmento 3 
+// UART parser (línea CR/LF) + helpers 
+static char rxline[64];
+static uint8_t rxpos = 0;
+
+static void print_help(void){
+    uart_puts("Cmd: HO/HF/HA | FF/FL/FM/FH/FA | M=<n>|MID <n> | BW=<n>|BW <n> | S\r\n");
+}
+static void ack_mid_bw(const char* what){
+    uart_puts("ACK "); uart_puts(what); uart_puts(" OK[");
+    uart_i16(mid-bw); uart_puts(".."); uart_i16(mid+bw); uart_puts("]\r\n");
+}
+// parser simple de enteros con signo; 1 si ok 
+static uint8_t parse_int16(const char *p, int16_t *out){
+    while(*p==' ' || *p=='=') p++;
+    int neg = 0; int32_t acc = 0; uint8_t have=0;
+    if(*p=='+' || *p=='-'){ neg = (*p=='-'); p++; }
+    while(*p>='0' && *p<='9'){
+        acc = acc*10 + (*p - '0');
+        p++; have=1;
+        if(acc > 32767) acc = 32767;
+    }
+    if(!have) return 0;
+    *out = (int16_t)(neg ? -acc : acc);
+    return 1;
+}
