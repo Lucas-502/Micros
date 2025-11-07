@@ -146,7 +146,7 @@ static uint8_t zone_from_temp(int16_t T){
     else                           return 4; // HIGH
 }
 
-//Autor: Valentino pelado borges — Segmento 3 
+
 // UART parser (línea CR/LF) + helpers 
 static char rxline[64];
 static uint8_t rxpos = 0;
@@ -172,3 +172,46 @@ static uint8_t parse_int16(const char *p, int16_t *out){
     *out = (int16_t)(neg ? -acc : acc);
     return 1;
 }
+
+// Decodificador de comandos 
+static void handle_line(char *line){
+    for(char *p=line; *p; ++p) *p = (char)toupper((unsigned char)*p);
+    while(*line==' ') line++;
+    char *e = line + strlen(line);
+    while(e>line && (e[-1]==' '||e[-1]=='\r'||e[-1]=='\n')) *--e = 0;
+    if(!*line) return;
+
+    if(!strcmp(line,"HO")){ hmode=H_ON;  uart_puts("Heater=ON\r\n");  return; }
+    if(!strcmp(line,"HF")){ hmode=H_OFF; uart_puts("Heater=OFF\r\n"); return; }
+    if(!strcmp(line,"HA")){ hmode=H_AUTO;uart_puts("Heater=AUTO\r\n");return; }
+
+    if(!strcmp(line,"FF")){ fmode=F_OFF;  uart_puts("Fan=OFF\r\n");  return; }
+    if(!strcmp(line,"FL")){ fmode=F_LOW;  uart_puts("Fan=LOW\r\n");  return; }
+    if(!strcmp(line,"FM")){ fmode=F_MED;  uart_puts("Fan=MED\r\n");  return; }
+    if(!strcmp(line,"FH")){ fmode=F_HIGH; uart_puts("Fan=HIGH\r\n"); return; }
+    if(!strcmp(line,"FA")){ fmode=F_AUTO; uart_puts("Fan=AUTO\r\n"); return; }
+
+    if(!strcmp(line,"S")){
+        uart_puts("STATUS mid="); uart_i16(mid);
+        uart_puts(" bw=");        uart_i16(bw);
+        uart_puts(" OK[");        uart_i16(mid-bw);
+        uart_puts("..");          uart_i16(mid+bw);
+        uart_puts("]\r\n");
+        return;
+    }
+    if(!strcmp(line,"H")){ print_help(); return; }
+
+    if(line[0]=='M'){
+        const char *p = line+1;
+        if(p[0]=='I' && p[1]=='D') p+=2;   // admite MID
+        int16_t v;
+        if(parse_int16(p,&v)){ mid=v; ack_mid_bw("M"); return; }
+    }
+    if(line[0]=='B' && line[1]=='W'){
+        const char *p = line+2;
+        int16_t v;
+        if(parse_int16(p,&v)){ bw=v; ack_mid_bw("BW"); return; }
+    }
+    uart_puts("ERR cmd: "); uart_puts(line); uart_puts("\r\n");
+}
+
