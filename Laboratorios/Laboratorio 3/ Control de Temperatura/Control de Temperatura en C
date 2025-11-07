@@ -191,6 +191,7 @@ static void handle_line(char *line){
     if(!strcmp(line,"FH")){ fmode=F_HIGH; uart_puts("Fan=HIGH\r\n"); return; }
     if(!strcmp(line,"FA")){ fmode=F_AUTO; uart_puts("Fan=AUTO\r\n"); return; }
 
+
     if(!strcmp(line,"S")){
         uart_puts("STATUS mid="); uart_i16(mid);
         uart_puts(" bw=");        uart_i16(bw);
