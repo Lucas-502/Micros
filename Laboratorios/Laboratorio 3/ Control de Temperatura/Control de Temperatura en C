@@ -1,1 +1,37 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <ctype.h>
 
+//  UART 9600 8N1 
+#define BAUD 9600UL
+#define UBRR_VAL ((F_CPU/(16UL*BAUD))-1)
+
+static inline void uart_init(void) {
+    UBRR0H = (uint8_t)(UBRR_VAL >> 8);
+    UBRR0L = (uint8_t)(UBRR_VAL);
+    UCSR0B = (1<<RXEN0)|(1<<TXEN0);
+    UCSR0C = (1<<UCSZ01)|(1<<UCSZ00); // 8N1
+}
+static inline void uart_putc(char c) {
+    while(!(UCSR0A & (1<<UDRE0)));
+    UDR0 = c;
+}
+static void uart_puts(const char *s) {
+    while(*s) uart_putc(*s++);
+}
+/* impresores sin itoa() */
+static void uart_u16(uint16_t v){
+    char buf[6]; uint8_t i=0;
+    do{ buf[i++] = (char)('0' + (v % 10)); v /= 10; }while(v);
+    while(i--) uart_putc(buf[i]);
+}
+static void uart_i16(int16_t v){
+    if(v < 0){ uart_putc('-'); v = (int16_t)(-v); }
+    uart_u16((uint16_t)v);
+}
+static void uart_u8(uint8_t v){ uart_u16(v); }
