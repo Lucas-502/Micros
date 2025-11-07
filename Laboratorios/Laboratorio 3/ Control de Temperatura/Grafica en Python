@@ -216,3 +216,14 @@ with open(args.csv, "a", newline="") as fcsv:
                     ax.relim(); ax.autoscale_view()
             plt.pause(0.02)
 
+except KeyboardInterrupt:
+        pass
+    finally:
+        stop_evt.set()
+        try:
+            ser.close()
+        except Exception:
+            pass
+        plt.ioff()
+        plt.show()
+        print(f"[OK] CSV guardado en {args.csv}")
