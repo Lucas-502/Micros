@@ -140,7 +140,7 @@ def on_key(event):
 
 fig.canvas.mpl_connect('key_press_event', on_key)
 
-# ------------------ Hilo consola (input) ------------------
+#  Hilo consola (input) 
 stop_evt = threading.Event()
 
 def tx_loop():
@@ -177,3 +177,42 @@ def tx_loop():
 
 tx_thread = threading.Thread(target=tx_loop, daemon=True)
 tx_thread.start()
+
+#  Loop principal: RX + grafico + CSV 
+with open(args.csv, "a", newline="") as fcsv:
+    w = csv.writer(fcsv)
+    try:
+        while not stop_evt.is_set():
+
+            # aplicar cambios de banda SOLO en hilo principal
+            if _band_dirty:
+                update_band()
+                _band_dirty = False
+
+            try:
+                raw = ser.readline().decode(errors="ignore").strip()
+            except (PortNotOpenError, SerialException):
+                raw = ""
+            if raw:
+                m = RX_FULL.search(raw)
+                if m:
+                    tempC = int(m.group(1))
+                    zone_s = m.group(2)
+                    out    = int(m.group(3))
+
+                    z = ZONE_MAP.get(zone_s, 1)
+                    heater = 1 if z == 0 else 0
+                    fan_level = FAN_FROM_ZONE[z]
+
+                    t = time.time() - t0
+                    ts_iso = datetime.now().isoformat(timespec="seconds")
+
+                    w.writerow([ts_iso, f"{t:.1f}", tempC, zone_s, out, heater, fan_level, raw])
+                    fcsv.flush()
+
+                    xs.append(t); Ts.append(tempC); Fs.append(fan_level)
+                    lineT.set_data(xs, Ts)
+                    lineF.set_data(xs, Fs)
+                    ax.relim(); ax.autoscale_view()
+            plt.pause(0.02)
+
