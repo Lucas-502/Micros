@@ -87,3 +87,24 @@ ax2.set_ylim(-0.2, 3.2)
 lines = [lineT, lineF]
 ax.legend(lines, [l.get_label() for l in lines], loc="upper left")
 
+xs, Ts, Fs = [], [], []
+t0 = time.time()
+
+def update_band():
+    global band
+    try:
+        band.remove()
+    except Exception:
+        pass
+    # recrea el parche con los nuevos mid/bw
+    band = ax.axhspan(mid-bw, mid+bw, alpha=0.15)
+    fig.canvas.draw_idle()
+
+print("""
+[LISTO] Escribí comandos en esta ventana y ENTER:
+  HO/HF/HA | FL/FM/FH/FF/FA | M=26 | BW=4 | S | H
+  Atajos: 'mid 26', 'bw 4', 'rng 23 30' (calcula mid y bw)
+  Hotkeys en la ventana del gráfico: ]/[ suben/bajan MID · }/{ suben/bajan BW
+  h: HA · f: FA · 0/1/2/3: Fan OFF/LOW/MED/HIGH · s: STATUS
+  Cortar: Ctrl+C
+""".strip())
