@@ -146,3 +146,11 @@ def opcion_1_graficas_en_vivo():
 
         return line_sp, line_pv, line_pwm
 
+    ani = FuncAnimation(fig, update, interval=50, blit=False)
+    print(f"[{now_str()}] Escuchando {used_port} @ {BAUD} — Ctrl+C para salir")
+    try:
+        plt.show()
+    finally:
+        if csv_file: csv_file.close()
+        if ser and ser.is_open: ser.close()
+        print(f"[{now_str()}] Cerrado.")
