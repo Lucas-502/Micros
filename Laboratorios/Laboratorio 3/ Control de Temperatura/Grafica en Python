@@ -61,3 +61,9 @@ def ser_write_line(line: str):
             print("[WARN] Puerto no abierto. No se envio:", line)
     except (PortNotOpenError, SerialException) as e:
         print("[WARN] No se pudo escribir en el puerto:", e)
+
+#  CSV 
+try:
+    open(args.csv, "x").write("timestamp,time_s,tempC,zone,out,heater,fan_level,raw\n")
+except FileExistsError:
+    pass
