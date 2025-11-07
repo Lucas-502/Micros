@@ -19,3 +19,12 @@ args = ap.parse_args()
 mid = args.mid
 bw  = args.bw
 _band_dirty = False          #  se actualiza en hilos, la dibuja el hilo principal
+
+# Terminador de línea que espera el firmware (CR+LF)
+LINE_END = "\r\n"
+
+# Zonas y parser de la linea de telemetria del firmware:
+# ejemplo: "Temp=27 C | ZONE=LOW | OUT=255"
+RX_FULL = re.compile(r"Temp=(\d+)\s+C\s+\|\s+ZONE=(\w+)\s+\|\s+OUT=(\d+)")
+ZONE_MAP = {"HEAT":0, "OK":1, "LOW":2, "MED":3, "HIGH":4}
+FAN_FROM_ZONE = {0:0, 1:0, 2:1, 3:2, 4:3}  # nivel 0..3 para graficar
