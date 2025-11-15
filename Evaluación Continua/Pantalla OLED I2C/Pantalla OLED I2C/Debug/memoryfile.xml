@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<project>                                  
+  <executable name="Pantalla OLED I2C.elf">                 
+    <memory name="program">              
+      <units>bytes</units>                 
+      <length>32768</length>                 
+      <used>3398</used>                     
+      <free>29370</free>                     
+    </memory>                              
+    <memory name="data">                 
+      <units>bytes</units>                 
+      <length>2048</length>                 
+      <used>1029</used>                     
+      <free>1019</free>                     
+    </memory>                              
+  </executable>                            
+</project>                                 
