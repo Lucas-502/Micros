@@ -1,114 +1,22 @@
-#include <SoftwareSerial.h>
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdint.h>
  
-//  Bluetooth
-SoftwareSerial BT(10, 11);  // RX, TX hacia HC-05
+/* Mapeo de pines */
+/* Movimiento (PORTD) */
+#define IN1_MASK   (1u<<PD2)   // D2
+#define IN2_MASK   (1u<<PD3)   // D3
+#define IN3_MASK   (1u<<PD4)   // D4
+#define IN4_MASK   (1u<<PD7)   // D7
  
-//  L298N principal 
-#define ENA 5
-#define IN1 2
-#define IN2 3
+#define ENA_MASK   (1u<<PD5)   // D5  -> OC0B (PWM)
+#define ENB_MASK   (1u<<PD6)   // D6  -> OC0A (PWM)
  
-#define ENB 6
-#define IN3 4
-#define IN4 7
- 
-//  Segundo L298N (dos motores de patada) 
-#define KICK_IN1 8
-#define KICK_IN2 9
-#define KICK_IN3 12
-#define KICK_IN4 13
-
-//  Variables 
-uint8_t SPEED = 200;
- 
-// Prototipos
-void motores_stop();
-void motores_forward();
-void motores_back();
-void motores_left();
-void motores_right();
-void kick_fire();
-
-
-void motores_stop() {
-  analogWrite(ENA, 0);
-  analogWrite(ENB, 0);
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
-}
- 
-void motores_forward() {
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
-}
- 
-void motores_back() {
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
-  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
-}
- 
-void motores_left() {
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
-  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
-}
- 
-void motores_right() {
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
-  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
-}
-
-void kick_fire() {
-  digitalWrite(KICK_IN1, HIGH);
-  digitalWrite(KICK_IN2, LOW);
-  digitalWrite(KICK_IN3, HIGH);
-  digitalWrite(KICK_IN4, LOW);
-  delay(400);
-  digitalWrite(KICK_IN1, LOW);
-  digitalWrite(KICK_IN2, LOW);
-  digitalWrite(KICK_IN3, LOW);
-  digitalWrite(KICK_IN4, LOW);
-}
- 
-void setup() {
-  pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-  pinMode(KICK_IN1, OUTPUT);
-  pinMode(KICK_IN2, OUTPUT);
-  pinMode(KICK_IN3, OUTPUT);
-  pinMode(KICK_IN4, OUTPUT);
-  motores_stop();
-  Serial.begin(9600);
-  BT.begin(9600);
-  Serial.println("Robot MiniFutbol listo (F,B,L,R,S,K).");
-}
-
-void loop() {
-  if (BT.available() > 0) {
-    char c = BT.read();
-    Serial.print("CMD: "); Serial.println(c);
-    switch (c) {
-      case 'F': motores_forward(); break;
-      case 'B': motores_back();    break;
-      case 'L': motores_left();    break;
-      case 'R': motores_right();   break;
-      case 'S': motores_stop();    break;
-      case 'K': kick_fire();       break;
-      default: break;
-    }
-  }
-  delay(10);
-}
+/* Patada (PORTB) */
+#define K1_MASK    (1u<<PB0)   // D8
+#define K2_MASK    (1u<<PB1)   // D9
+#define K3_MASK    (1u<<PB4)   // D12
+#define K4_MASK    (1u<<PB5)   // D13
