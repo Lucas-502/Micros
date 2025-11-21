@@ -78,3 +78,19 @@ void motores_forward(void){
     PORTD = (PORTD | IN1_MASK | IN3_MASK) & ~(IN2_MASK | IN4_MASK);
 }
 
+void motores_back(void){
+    set_speed(SPEED);
+    // IN1=L, IN2=H  |  IN3=L, IN4=H
+    PORTD = (PORTD | IN2_MASK | IN4_MASK) & ~(IN1_MASK | IN3_MASK);
+}
+ 
+void motores_left(void){
+    set_speed(SPEED);
+    // IN1=L, IN2=H  |  IN3=H, IN4=L
+    PORTD = (PORTD | IN2_MASK | IN3_MASK) & ~(IN1_MASK | IN4_MASK);
+}
+void motores_right(void){
+    set_speed(SPEED);
+    // IN1=H, IN2=L  |  IN3=L, IN4=H
+    PORTD = (PORTD | IN1_MASK | IN4_MASK) & ~(IN2_MASK | IN3_MASK);
+}
