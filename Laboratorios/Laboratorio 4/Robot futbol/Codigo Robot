@@ -20,3 +20,27 @@
 #define K2_MASK    (1u<<PB1)   // D9
 #define K3_MASK    (1u<<PB4)   // D12
 #define K4_MASK    (1u<<PB5)   // D13
+
+//  UART0 (HC-05) 
+static void uart_init_9600(void) {
+    // 9600 bps @ 16MHz -> UBRR = 103
+    UBRR0H = 0;
+    UBRR0L = 103;
+    UCSR0A = 0x00;
+    UCSR0B = (1<<RXEN0) | (1<<TXEN0);
+    UCSR0C = (1<<UCSZ01) | (1<<UCSZ00); // 8N1
+}
+static void uart_putc(char c){
+    while(!(UCSR0A & (1<<UDRE0)));
+    UDR0 = c;
+}
+static void uart_puts(const char *s){
+    while(*s){ uart_putc(*s++); }
+}
+static uint8_t uart_rx_available(void){
+    return (UCSR0A & (1<<RXC0));
+}
+static char uart_getc(void){
+    while(!uart_rx_available());
+    return UDR0;
+}
