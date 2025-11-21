@@ -58,3 +58,10 @@ static inline void set_speed(uint8_t duty){
     SPEED = duty;
     OCR0A = duty; // ENB (PD6)
     OCR0B = duty; // ENA (PD5)
+
+static inline void in_all_low(void){
+    PORTD &= ~(IN1_MASK | IN2_MASK | IN3_MASK | IN4_MASK);
+}
+static inline void kick_all_low(void){
+    PORTB &= ~(K1_MASK | K2_MASK | K3_MASK | K4_MASK);
+}
