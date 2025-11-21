@@ -101,3 +101,13 @@ void kick_fire(void){
     _delay_ms(400);
     kick_all_low();
 }
+
+// Inicialización de IO
+static void io_init(void){
+    DDRD |= (ENA_MASK | ENB_MASK | IN1_MASK | IN2_MASK | IN3_MASK | IN4_MASK);
+    DDRB |= (K1_MASK | K2_MASK | K3_MASK | K4_MASK);
+ 
+    PORTD &= ~(ENA_MASK | ENB_MASK | IN1_MASK | IN2_MASK | IN3_MASK | IN4_MASK);
+    PORTB &= ~(K1_MASK | K2_MASK | K3_MASK | K4_MASK);
+}
+
