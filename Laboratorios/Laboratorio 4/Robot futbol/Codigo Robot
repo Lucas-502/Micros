@@ -94,3 +94,10 @@ void motores_right(void){
     // IN1=H, IN2=L  |  IN3=L, IN4=H
     PORTD = (PORTD | IN1_MASK | IN4_MASK) & ~(IN2_MASK | IN3_MASK);
 }
+
+void kick_fire(void){
+    // Activa ambos motores de patada en un sentido
+    PORTB = (PORTB | K1_MASK | K3_MASK) & ~(K2_MASK | K4_MASK);
+    _delay_ms(400);
+    kick_all_low();
+}
