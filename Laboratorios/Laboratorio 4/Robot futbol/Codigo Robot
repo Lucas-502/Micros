@@ -111,3 +111,30 @@ static void io_init(void){
     PORTB &= ~(K1_MASK | K2_MASK | K3_MASK | K4_MASK);
 }
 
+int main(void){
+    io_init();
+    pwm0_init();
+    uart_init_9600();
+ 
+    motores_stop();
+    uart_puts("Robot MiniFutbol listo (F,B,L,R,S,K).\r\n");
+ 
+    for(;;){
+        if(uart_rx_available()){
+            char c = uart_getc();
+            uart_puts("CMD: "); uart_putc(c); uart_puts("\r\n");
+ 
+            switch(c){
+                case 'F': motores_forward(); break;
+                case 'B': motores_back();    break;
+                case 'L': motores_left();    break;
+                case 'R': motores_right();   break;
+                case 'S': motores_stop();    break;
+                case 'K': kick_fire();       break;
+                default: /* nada */          break;
+            }
+        }
+        _delay_ms(10);
+    }
+}
+
