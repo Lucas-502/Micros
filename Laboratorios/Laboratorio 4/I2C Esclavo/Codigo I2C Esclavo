@@ -1,1 +1,339 @@
+#include "twi.h"          // misma librería TWI que el maestro
 
+#ifndef F_CPU
+#define F_CPU 16000000UL
+#endif
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <util/twi.h>
+#include <stdint.h>
+
+// CONFIGURACIÓN GENERAL
+// Dirección I2C del esclavo (debe coincidir con la del maestro)
+#define SLAVE_ADDR          0x20
+
+// Comando: bit para reproducir la canción
+#define CMD_PLAY_SONG_BIT   0x01  // si cmd & 0x01 -> reproducir canción 1
+
+// Servo en PB1 (OC1A)
+#define SERVO_DDR   DDRB
+#define SERVO_PIN   PB1
+
+// Buzzer en PB2
+#define BUZZER_DDR   DDRB
+#define BUZZER_PORT  PORTB
+#define BUZZER_PIN   PB2
+
+// PROTOTIPOS
+static void servo_init(void);
+static void servo_set_from_byte(uint8_t val);
+static void servo_update(void);
+
+static void buzzer_init(void);
+static void buzzer_off(void);
+
+// delays que SÍ cumplen la regla de XC8 (solo constantes en _delay_x)
+static void delay_ms_var(uint16_t ms);
+static void delay_us_var(uint16_t us);
+
+// Canción 1 (usando tus datos)
+void cancion1(void);
+
+// main
+int main(void)
+{
+
+    uint8_t servo_val;
+    uint8_t cmd;
+
+    servo_init();
+    buzzer_init();
+
+    // Inicializar como ESCLAVO I2C
+    twi_slave_init(SLAVE_ADDR);
+
+	while (1)
+	{
+		uint8_t status = twi_slave_listen();
+
+		// Actualizás el servo target cuando el maestro manda algo:
+		if (status == TW_SR_SLA_ACK)
+		{
+			if (twi_slave_receive(&servo_val) != 0) continue;
+			if (twi_slave_receive(&cmd) != 0)       continue;
+
+			servo_set_from_byte(servo_val);
+
+			if (cmd & CMD_PLAY_SONG_BIT)
+				cancion1();
+		}
+
+		// En cualquier caso, en cada iteración suavizás el movimiento:
+		servo_update();
+	}
+
+
+    return 0;
+}
+
+// SERVO EN TIMER1, OC1A (PB1)
+#define SERVO_MIN_PULSE   1000   // ajustado a tu servo
+#define SERVO_MAX_PULSE   4800
+#define SERVO_STEP_PULSE    600    // ya lo estabas usando y te gusta
+#define SERVO_DEADBAND       8    // zona muerta para evitar vibración
+
+static uint16_t servo_pulse_actual =
+(SERVO_MIN_PULSE + SERVO_MAX_PULSE) / 2;
+static uint16_t servo_pulse_target =
+(SERVO_MIN_PULSE + SERVO_MAX_PULSE) / 2;
+
+static void servo_init(void)
+{
+	SERVO_DDR |= (1 << SERVO_PIN);   // PB1 como salida
+
+	// Timer1 Fast PWM, TOP = ICR1, 50 Hz
+	TCCR1A = (1 << COM1A1) | (1 << WGM11);
+	TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11);  // prescaler 8
+
+	ICR1 = 39999;  // 20 ms
+
+	servo_pulse_actual = servo_pulse_target =
+	(SERVO_MIN_PULSE + SERVO_MAX_PULSE) / 2;
+	OCR1A = servo_pulse_actual;
+}
+
+// Se llama cuando llega un nuevo byte del maestro
+static void servo_set_from_byte(uint8_t val)
+{
+	uint16_t target =
+	SERVO_MIN_PULSE +
+	(uint32_t)(SERVO_MAX_PULSE - SERVO_MIN_PULSE) * val / 255;
+
+	if (target < SERVO_MIN_PULSE) target = SERVO_MIN_PULSE;
+	if (target > SERVO_MAX_PULSE) target = SERVO_MAX_PULSE;
+
+	// Deadband: solo aceptamos nuevo target si el cambio es grande
+	if (target > servo_pulse_target + SERVO_DEADBAND ||
+	target + SERVO_DEADBAND < servo_pulse_target)
+	{
+		servo_pulse_target = target;
+	}
+}
+
+// Se llama en cada iteración del while(1)
+static void servo_update(void)
+{
+	if (servo_pulse_actual < servo_pulse_target)
+	{
+		uint16_t diff = servo_pulse_target - servo_pulse_actual;
+		if (diff < SERVO_STEP_PULSE)
+		servo_pulse_actual = servo_pulse_target;
+		else
+		servo_pulse_actual += SERVO_STEP_PULSE;
+	}
+	else if (servo_pulse_actual > servo_pulse_target)
+	{
+		uint16_t diff = servo_pulse_actual - servo_pulse_target;
+		if (diff < SERVO_STEP_PULSE)
+		servo_pulse_actual = servo_pulse_target;
+		else
+		servo_pulse_actual -= SERVO_STEP_PULSE;
+	}
+
+	OCR1A = servo_pulse_actual;
+}
+
+// BUZZER
+static void buzzer_init(void)
+{
+    BUZZER_DDR  |= (1 << BUZZER_PIN);   // salida
+    BUZZER_PORT &= ~(1 << BUZZER_PIN);  // LOW al inicio
+}
+
+static void buzzer_off(void)
+{
+    BUZZER_PORT &= ~(1 << BUZZER_PIN);
+}
+
+// DELAYS VARIABLES (compatibles con XC8)
+static void delay_ms_var(uint16_t ms)
+{
+    while (ms--)
+    {
+        _delay_ms(1);   // argumento constante -> OK para XC8
+    }
+}
+
+static void delay_us_var(uint16_t us)
+{
+    while (us--)
+    {
+        _delay_us(1);   // argumento constante -> OK para XC8
+    }
+}
+
+// CANCIÓN 1 (ADAPTADA DE TU CÓDIGO)
+// Notas (enum igual al tuyo)
+enum Note {
+    REST = 0,
+    C4, D4, E4, F4, G4, A4, B4,  // 1..7
+    C5, D5, E5, F5, G5, A5, B5,  // 8..14
+    C6, D6, E6                   // 15..17
+};
+
+// Tabla ICR_TAB de tu código original
+// (equivalente al TOP del Timer para cada nota)
+static const uint16_t ICR_TAB[] = {
+    /* REST */ 0,
+    /* C4..B4 */ 7644, 6811, 6067, 5727, 5102, 4546, 4050,
+    /* C5..B5 */ 3822, 3405, 3034, 2863, 2551, 2273, 2025,
+    /* C6..E6 */ 1910, 1702, 1516
+};
+
+#define MAX_NOTAS 96
+typedef struct{
+    uint8_t  nota_idx[MAX_NOTAS];
+    uint16_t dur_ms [MAX_NOTAS];
+    uint16_t len;
+} Cancion;
+
+static Cancion song1;
+
+// Auxiliar de líneas para construir canciones
+typedef struct {
+    const uint8_t *n;
+    const uint8_t *d;
+    uint16_t len;
+} Line;
+
+// Cancion 1 Parte A
+static const uint8_t A1_note[] = { F5, A5, B5 };
+static const uint8_t A1_dur[]  = { 4,  4,  7  };
+static const uint8_t A2_note[] = { F5, A5, B5 };
+static const uint8_t A2_dur[]  = { 4,  4,  7  };
+static const uint8_t A3_note[] = { F5, A5, B5, E6, D6 };
+static const uint8_t A3_dur[]  = { 4,  4,  5,  4,  9  };
+static const uint8_t A4_note[] = { B5, C6, B5, G5, E5 };
+static const uint8_t A4_dur[]  = { 4,  5,  4,  4,  10 };
+static const uint8_t A5_note[] = { D5, E5, G5, E5 };
+static const uint8_t A5_dur[]  = { 4,  4,  4,  8 };
+static const Line LINES_A[] = {
+  {A1_note,A1_dur,sizeof(A1_note)},
+  {A2_note,A2_dur,sizeof(A2_note)},
+  {A3_note,A3_dur,sizeof(A3_note)},
+  {A4_note,A4_dur,sizeof(A4_note)},
+  {A5_note,A5_dur,sizeof(A5_note)}
+};
+
+// Cancion 1 Parte B
+static const uint8_t B1_note[] = { F5, A5, B5 };
+static const uint8_t B1_dur[]  = { 4,  4,  7  };
+static const uint8_t B2_note[] = { F5, A5, B5 };
+static const uint8_t B2_dur[]  = { 4,  4,  7  };
+static const uint8_t B3_note[] = { F5, A5, B5, E6, D6 };
+static const uint8_t B3_dur[]  = { 4,  4,  5,  4,  10 };
+static const uint8_t B4_note[] = { B5, C6, E6, B5, G5 };
+static const uint8_t B4_dur[]  = { 4,  4,  4,  5,  11 };
+static const uint8_t B5_note[] = { B5, G5, D5, E5 };
+static const uint8_t B5_dur[]  = { 4,  5,  4,  15 };
+static const Line LINES_B[] = {
+  {B1_note,B1_dur,sizeof(B1_note)},
+  {B2_note,B2_dur,sizeof(B2_note)},
+  {B3_note,B3_dur,sizeof(B3_note)},
+  {B4_note,B4_dur,sizeof(B4_note)},
+  {B5_note,B5_dur,sizeof(B5_note)}
+};
+
+// Tiempo total aproximado para cada parte
+#define TOTAL_MS_A 6000
+#define TOTAL_MS_B 6000
+
+static uint32_t sum_units(const Line *L, uint8_t n)
+{
+    uint32_t s = 0;
+    for(uint8_t i=0; i<n; i++)
+        for(uint16_t j=0; j<L[i].len; j++)
+            s += L[i].d[j];
+    return s;
+}
+
+static uint16_t tick_ms_for(uint32_t total_ms, const Line *L, uint8_t n)
+{
+    uint32_t T = sum_units(L, n);
+    if(!T) T = 1;
+    return (uint16_t)((total_ms + T/2) / T);
+}
+
+// Construir canción 1 (A+B) en song1
+static void init_song1(void)
+{
+    const uint8_t nA = sizeof(LINES_A)/sizeof(LINES_A[0]);
+    const uint8_t nB = sizeof(LINES_B)/sizeof(LINES_B[0]);
+    const uint16_t tickA = tick_ms_for(TOTAL_MS_A, LINES_A, nA);
+    const uint16_t tickB = tick_ms_for(TOTAL_MS_B, LINES_B, nB);
+
+    song1.len = 0;
+    // Parte A
+    for(uint8_t i=0; i<nA; i++){
+        for(uint16_t j=0; j<LINES_A[i].len && song1.len<MAX_NOTAS; j++){
+            song1.nota_idx[song1.len] = LINES_A[i].n[j];
+            song1.dur_ms [song1.len]  = (uint16_t)LINES_A[i].d[j] * tickA;
+            song1.len++;
+        }
+    }
+    // Parte B
+    for(uint8_t i=0; i<nB; i++){
+        for(uint16_t j=0; j<LINES_B[i].len && song1.len<MAX_NOTAS; j++){
+            song1.nota_idx[song1.len] = LINES_B[i].n[j];
+            song1.dur_ms [song1.len]  = (uint16_t)LINES_B[i].d[j] * tickB;
+            song1.len++;
+        }
+    }
+}
+
+// Implementación bloqueante de canción 1 sobre BUZZER_PIN
+void cancion1(void)
+{
+    static uint8_t inited = 0;
+    if (!inited)
+    {
+        init_song1();
+        inited = 1;
+    }
+
+    for (uint16_t i = 0; i < song1.len; i++)
+    {
+        enum Note n = (enum Note)song1.nota_idx[i];
+        uint16_t dur_ms = song1.dur_ms[i];
+
+        if (n == REST || n >= (sizeof(ICR_TAB)/sizeof(ICR_TAB[0])))
+        {
+            // Silencio
+            buzzer_off();
+            delay_ms_var(dur_ms);
+        }
+        else
+        {
+            // halfPeriodUs ? ICR/2 µs (derivado de tu configuración de Timer)
+            uint16_t halfPeriodUs = ICR_TAB[n] / 4;
+            if (halfPeriodUs == 0) halfPeriodUs = 1;
+
+            uint32_t remaining_us = (uint32_t)dur_ms * 1000UL;
+
+            while (remaining_us > halfPeriodUs)
+            {
+                // Toggle buzzer
+                BUZZER_PORT ^= (1 << BUZZER_PIN);
+                delay_us_var(halfPeriodUs);
+                remaining_us -= halfPeriodUs;
+            }
+
+            // Aseguramos buzzer apagado al final de la nota
+            buzzer_off();
+        }
+
+        // Pequeña pausa entre notas
+        delay_ms_var(20);
+    }
+}
