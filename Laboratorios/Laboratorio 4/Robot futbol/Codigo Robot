@@ -44,3 +44,17 @@ static char uart_getc(void){
     while(!uart_rx_available());
     return UDR0;
 }
+static volatile uint8_t SPEED = 200; // 0..255
+ 
+static void pwm0_init(void){
+    // Fast PWM, non-inverting en OC0A (PD6) y OC0B (PD5), prescaler = 64
+    // f_pwm ≈ 16MHz / (64*256) ≈ 976 Hz
+    TCCR0A = (1<<COM0A1) | (1<<COM0B1) | (1<<WGM01) | (1<<WGM00);
+    TCCR0B = (1<<CS01) | (1<<CS00);
+    OCR0A = 0;  // ENB
+    OCR0B = 0;  // ENA
+}
+static inline void set_speed(uint8_t duty){
+    SPEED = duty;
+    OCR0A = duty; // ENB (PD6)
+    OCR0B = duty; // ENA (PD5)
