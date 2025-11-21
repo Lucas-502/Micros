@@ -66,3 +66,49 @@ void motores_right() {
   digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
 }
+
+void kick_fire() {
+  digitalWrite(KICK_IN1, HIGH);
+  digitalWrite(KICK_IN2, LOW);
+  digitalWrite(KICK_IN3, HIGH);
+  digitalWrite(KICK_IN4, LOW);
+  delay(400);
+  digitalWrite(KICK_IN1, LOW);
+  digitalWrite(KICK_IN2, LOW);
+  digitalWrite(KICK_IN3, LOW);
+  digitalWrite(KICK_IN4, LOW);
+}
+ 
+void setup() {
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(KICK_IN1, OUTPUT);
+  pinMode(KICK_IN2, OUTPUT);
+  pinMode(KICK_IN3, OUTPUT);
+  pinMode(KICK_IN4, OUTPUT);
+  motores_stop();
+  Serial.begin(9600);
+  BT.begin(9600);
+  Serial.println("Robot MiniFutbol listo (F,B,L,R,S,K).");
+}
+
+void loop() {
+  if (BT.available() > 0) {
+    char c = BT.read();
+    Serial.print("CMD: "); Serial.println(c);
+    switch (c) {
+      case 'F': motores_forward(); break;
+      case 'B': motores_back();    break;
+      case 'L': motores_left();    break;
+      case 'R': motores_right();   break;
+      case 'S': motores_stop();    break;
+      case 'K': kick_fire();       break;
+      default: break;
+    }
+  }
+  delay(10);
+}
