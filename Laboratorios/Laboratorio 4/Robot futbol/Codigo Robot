@@ -65,3 +65,16 @@ static inline void in_all_low(void){
 static inline void kick_all_low(void){
     PORTB &= ~(K1_MASK | K2_MASK | K3_MASK | K4_MASK);
 }
+
+// Movimiento 
+void motores_stop(void){
+    set_speed(0);
+    in_all_low();
+}
+ 
+void motores_forward(void){
+    set_speed(SPEED);
+    // IN1=H, IN2=L  |  IN3=H, IN4=L
+    PORTD = (PORTD | IN1_MASK | IN3_MASK) & ~(IN2_MASK | IN4_MASK);
+}
+
